@@ -1,0 +1,14 @@
+[package]
+name = "hxo-parser-typescript"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TypeScript/JavaScript parser for HXO framework"
+keywords = ["hxo", "typescript", "javascript", "parser"]
+categories = ["parsing"]
+
+[dependencies]
+hxo-types.workspace = true
+hxo-parser.workspace = true
+hxo-ir.workspace = true

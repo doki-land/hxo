@@ -1,0 +1,14 @@
+[package]
+name = "hxo-parser-stylus"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+description = "Stylus parser for HXO framework"
+keywords = ["hxo", "stylus", "parser"]
+categories = ["parsing"]
+
+[dependencies]
+hxo-types.workspace = true
+serde.workspace = true

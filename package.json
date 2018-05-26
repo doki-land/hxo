@@ -1,11 +1,24 @@
 {
+    "name": "project-hxo",
     "private": true,
+    "description": "HXO Framework Project",
     "scripts": {
-        "build": "cargo build --release",
-        "test": "cargo test --release",
-        "fmt": "cargo fmt --all",
-        "push": "wee test && git push",
-        "reset": "git reset Head~ --soft",
-        "pub": "cargo-publish-all --yes --allow-dirty",
-    }
+        "build": "pnpm -r build",
+        "test": "pnpm -r test",
+        "test:coverage": "tsx scripts/coverage.ts",
+        "lint:size": "tsx scripts/check-file-size.ts",
+        "lint": "biome lint .",
+        "format": "biome format . --write",
+        "check": "biome check --write .",
+        "typecheck": "pnpm -r exec tsc --noEmit"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.3.11",
+        "happy-dom": "latest",
+        "rolldown": "latest",
+        "tsx": "^4.21.0",
+        "typescript": "^5.0.0",
+        "vitest": "latest"
+    },
+    "packageManager": "pnpm@10.27.0+sha512.72d699da16b1179c14ba9e64dc71c9a40988cbdc65c264cb0e489db7de917f20dcf4d64d8723625f2969ba52d4b7e2a1170682d9ac2a5dcaeaab732b7e16f04a"
 }

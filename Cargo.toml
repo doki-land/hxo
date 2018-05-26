@@ -1,12 +1,92 @@
 [workspace]
-members = ["projects/*"]
-default-members = [
-    "projects/sub_projects",
+members = [
+    "compilers/hxo-bundler",
+    "compilers/hxo-compiler",
+    "compilers/hxo-cli",
+    "compilers/hxo-hydrate",
+    "compilers/hxo-ir",
+    "compilers/hxo-lsp",
+    "compilers/hxo-optimizer",
+    "compilers/hxo-parser",
+    "compilers/hxo-parser-css",
+    "compilers/hxo-parser-json",
+    "compilers/hxo-parser-less",
+    "compilers/hxo-parser-markdown",
+    "compilers/hxo-parser-sass",
+    "compilers/hxo-parser-scss",
+    "compilers/hxo-parser-stylus",
+    "compilers/hxo-parser-tailwind",
+    "compilers/hxo-parser-template",
+    "compilers/hxo-parser-toml",
+    "compilers/hxo-parser-typescript",
+    "compilers/hxo-parser-yaml",
+    "compilers/hxo-parser-pug",
+    "compilers/hxo-parser-properties",
+    "compilers/hxo-parser-rust",
+    "compilers/hxo-parser-fluent",
+    "compilers/hxo-target-wasm",
+    "compilers/hxo-script-analyzer",
+    "compilers/hxo-style-processor",
+    "compilers/hxo-source-map",
+    "compilers/hxo-ssr",
+    "compilers/hxo-target-dts",
+    "compilers/hxo-target-css",
+    "compilers/hxo-target-html",
+    "compilers/hxo-target-js",
+    "compilers/hxo-target-map",
+    "compilers/hxo-types",
+    "compilers/hxo-wit",
 ]
-exclude = [
-    "projects/.DS_Store",
-]
+resolver = "2"
 
-[profile.release]
-lto = true
-panic = "abort"
+[workspace.package]
+version = "0.1.0"
+authors = ["HXO Team"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/hxo-framework/hxo"
+homepage = "https://hxo.dev"
+
+[workspace.dependencies]
+hxo-types = { path = "compilers/hxo-types" }
+hxo-source-map = { path = "compilers/hxo-source-map" }
+hxo-parser = { path = "compilers/hxo-parser" }
+hxo-lsp = { path = "compilers/hxo-lsp" }
+hxo-compiler = { path = "compilers/hxo-compiler" }
+hxo-cli = { path = "compilers/hxo-cli" }
+hxo-ir = { path = "compilers/hxo-ir" }
+hxo-ssr = { path = "compilers/hxo-ssr" }
+hxo-hydrate = { path = "compilers/hxo-hydrate" }
+hxo-target-wasm = { path = "compilers/hxo-target-wasm" }
+hxo-bundler = { path = "compilers/hxo-bundler" }
+hxo-optimizer = { path = "compilers/hxo-optimizer" }
+hxo-target-js = { path = "compilers/hxo-target-js" }
+hxo-target-html = { path = "compilers/hxo-target-html" }
+hxo-target-css = { path = "compilers/hxo-target-css" }
+hxo-target-dts = { path = "compilers/hxo-target-dts" }
+hxo-target-map = { path = "compilers/hxo-target-map" }
+hxo-parser-css = { path = "compilers/hxo-parser-css" }
+hxo-parser-json = { path = "compilers/hxo-parser-json" }
+hxo-parser-less = { path = "compilers/hxo-parser-less" }
+hxo-parser-markdown = { path = "compilers/hxo-parser-markdown" }
+hxo-parser-sass = { path = "compilers/hxo-parser-sass" }
+hxo-parser-scss = { path = "compilers/hxo-parser-scss" }
+hxo-parser-stylus = { path = "compilers/hxo-parser-stylus" }
+hxo-parser-tailwind = { path = "compilers/hxo-parser-tailwind" }
+hxo-parser-template = { path = "compilers/hxo-parser-template" }
+hxo-parser-toml = { path = "compilers/hxo-parser-toml" }
+hxo-parser-typescript = { path = "compilers/hxo-parser-typescript" }
+hxo-parser-yaml = { path = "compilers/hxo-parser-yaml" }
+hxo-parser-pug = { path = "compilers/hxo-parser-pug" }
+hxo-parser-properties = { path = "compilers/hxo-parser-properties" }
+hxo-parser-rust = { path = "compilers/hxo-parser-rust" }
+hxo-parser-fluent = { path = "compilers/hxo-parser-fluent" }
+hxo-script-analyzer = { path = "compilers/hxo-script-analyzer" }
+hxo-style-processor = { path = "compilers/hxo-style-processor" }
+serde = { version = "1.0", features = ["derive"] }
+url = "2.5"
+tower-lsp = "0.20"
+serde_json = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+dashmap = "5.5"
+tokio = "1.36"

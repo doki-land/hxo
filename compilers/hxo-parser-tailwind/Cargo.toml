@@ -1,0 +1,13 @@
+[package]
+name = "hxo-parser-tailwind"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tailwind CSS parser for HXO framework"
+keywords = ["hxo", "tailwind", "parser"]
+categories = ["parsing"]
+
+[dependencies]
+hxo-types.workspace = true
+serde = { workspace = true, features = ["derive"] }

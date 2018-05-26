@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, dev ]
+  pull_request:
+    branches: [ master, dev ]
+
+jobs:
+  # 1. 检查阶段：Lint, Format, Typecheck
+  check:
+    name: Check (Rust & TS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Setup Rust
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Setup Node/pnpm
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      # Install Dependencies
+      - name: Install TS Dependencies
+        run: pnpm install
+
+      # Rust Checks
+      - name: Rust Format Check
+        run: cargo fmt --all -- --check
+      - name: Rust Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # TS Checks
+      - name: TS Biome Check
+        run: pnpm biome check .
+      - name: TS Typecheck
+        run: pnpm typecheck
+
+  # 2. 构建与测试阶段：Build & Test (Matrix OS)
+  build-test:
+    name: Build & Test
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Setup Rust
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      # Setup Node/pnpm
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      # Install Dependencies
+      - name: Install TS Dependencies
+        run: pnpm install
+
+      # Rust Build & Test (包括 WASM)
+      - name: Rust Build
+        run: cargo build --verbose
+      - name: Rust Test
+        run: cargo test --verbose
+      - name: Build WASM Target
+        run: cargo build -p hxo-target-wasm --target wasm32-wasip2 --release
+
+      # TS Build & Test (直接使用同环境构建出的 WASM)
+      - name: TS Build
+        run: pnpm build
+      - name: TS Test
+        run: pnpm test
