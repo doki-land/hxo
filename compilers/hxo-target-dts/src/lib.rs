@@ -1,6 +1,7 @@
 use hxo_ir::IRModule;
 use hxo_types::{CodeWriter, Result};
 
+#[derive(Default)]
 pub struct DtsWriter {
     inner: CodeWriter,
 }
@@ -63,6 +64,7 @@ impl DtsWriter {
     }
 }
 
+#[derive(Default)]
 pub struct DtsBackend;
 
 impl DtsBackend {
@@ -106,23 +108,29 @@ impl DtsBackend {
         writer.write_import(&["VNode"], "@hxo/core");
         writer.newline();
 
+        let props_name = format!("{}Props", ir.name);
+        let emits_name = format!("{}Emits", ir.name);
+
         // Props interface
-        writer.write_interface("Props", |writer| {
+        writer.write_interface(&props_name, |writer| {
             if props.is_empty() {
                 writer.write_line("[key: string]: any;");
             }
             else {
                 for prop in &props {
-                    writer.write_line(&format!("{}: any;", prop));
+                    writer.write_line(&format!("{}?: any;", prop));
                 }
             }
         });
         writer.newline();
 
-        // Emits type (simplified)
+        // Emits interface
         if !emits.is_empty() {
-            let emits_type = emits.iter().map(|e| format!("'{}'", e)).collect::<Vec<_>>().join(" | ");
-            writer.write_type_alias("Emits", &emits_type);
+            writer.write_interface(&emits_name, |writer| {
+                for emit in &emits {
+                    writer.write_line(&format!("(e: '{}', ...args: any[]): void;", emit));
+                }
+            });
             writer.newline();
         }
 
@@ -135,9 +143,9 @@ impl DtsBackend {
             for prop in &props {
                 writer.write_line(&format!("{}: any;", prop));
             }
-            writer.write_line("$props: Props;");
+            writer.write_line(&format!("$props: {};", props_name));
             if !emits.is_empty() {
-                writer.write_line("$emit: (event: Emits, ...args: any[]) => void;");
+                writer.write_line(&format!("$emit: {};", emits_name));
             }
         });
         writer.newline();
@@ -146,7 +154,7 @@ impl DtsBackend {
         writer.write_line("declare const component: {");
         writer.indent();
         writer.write_line(&format!("name: '{}';", ir.name));
-        writer.write_line("setup(props: Props): ComponentInstance;");
+        writer.write_line(&format!("setup(props: {}): ComponentInstance;", props_name));
         writer.write_line("render(ctx: ComponentInstance): VNode;");
         writer.dedent();
         writer.write_line("};");

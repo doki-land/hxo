@@ -17,7 +17,12 @@ fn test_generate_css() {
         custom_blocks: vec![],
         span: Span::default(),
     };
-    ir.styles.push(StyleIR { lang: "css".to_string(), code: ".test { color: red; }".to_string(), scoped: false, span: Span::default() });
+    ir.styles.push(StyleIR {
+        lang: "css".to_string(),
+        code: ".test { color: red; }".to_string(),
+        scoped: false,
+        span: Span::default(),
+    });
 
     let backend = CssBackend::new(false);
     let result = backend.generate(&ir).expect("Failed to generate CSS");
@@ -40,7 +45,12 @@ fn test_generate_scoped_css() {
         custom_blocks: vec![],
         span: Span::default(),
     };
-    ir.styles.push(StyleIR { lang: "css".to_string(), code: ".test { color: blue; }".to_string(), scoped: true, span: Span::default() });
+    ir.styles.push(StyleIR {
+        lang: "css".to_string(),
+        code: ".test { color: blue; }".to_string(),
+        scoped: true,
+        span: Span::default(),
+    });
 
     let backend = CssBackend::new(false);
     let result = backend.generate(&ir).expect("Failed to generate CSS");

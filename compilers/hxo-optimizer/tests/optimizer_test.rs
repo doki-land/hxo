@@ -32,8 +32,8 @@ fn test_optimize_i18n() {
         span: Span::unknown(),
     };
 
-    let optimizer = Optimizer::new();
-    optimizer.optimize_i18n(&mut ir, &messages);
+    let _optimizer = Optimizer::new();
+    Optimizer::optimize_i18n(&mut ir, &messages);
 
     if let Some(template) = &ir.template {
         if let TemplateNodeIR::Interpolation(expr) = &template.nodes[0] {

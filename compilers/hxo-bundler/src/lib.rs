@@ -20,8 +20,16 @@ impl Bundler {
     pub fn new() -> Self {
         Self { feature_set: FeatureSet::default() }
     }
+}
 
-    pub fn analyze_project(&mut self, modules: &[IRModule]) {
+impl Default for Bundler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Bundler {
+    pub fn analyze_all(&mut self, modules: &[IRModule]) {
         for module in modules {
             self.analyze_module(module);
         }

@@ -1,6 +1,7 @@
 use hxo_ir::{AttributeIR, ElementIR, IRModule, TemplateNodeIR};
 use hxo_types::{CodeWriter, Result};
 
+#[derive(Default)]
 pub struct HtmlWriter {
     inner: CodeWriter,
 }
@@ -162,6 +163,7 @@ impl HtmlWriter {
     }
 }
 
+#[derive(Default)]
 pub struct HtmlBackend;
 
 impl HtmlBackend {

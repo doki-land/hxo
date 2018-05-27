@@ -93,12 +93,12 @@ async fn main() -> Result<()> {
                         fs::create_dir_all(&output)?;
                         let out_file = output.join(format!("{}.js", component_name));
                         fs::write(&out_file, &result.code)?;
-                        
+
                         if let Some(map) = result.source_map {
                             let map_file = output.join(format!("{}.js.map", component_name));
                             fs::write(map_file, map.to_json()?)?;
                         }
-                        
+
                         println!("{} Build complete!", style("✔").green());
                     }
                     Err(e) => {

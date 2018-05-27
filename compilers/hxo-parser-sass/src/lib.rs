@@ -1,4 +1,4 @@
-use hxo_parser::{ParseState, StyleSubParser};
+use hxo_parser::{ParseState, StyleParser};
 use hxo_types::Result;
 use std::collections::HashMap;
 
@@ -13,7 +13,7 @@ pub fn compile(source: &str, _options: &SassParserOptions) -> Result<String> {
     parser.parse(&mut state, "sass")
 }
 
-impl StyleSubParser for SassParser {
+impl StyleParser for SassParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<String> {
         let mut parser = SassParserImpl { state, variables: HashMap::new() };
         parser.parse()

@@ -7,4 +7,7 @@ license.workspace = true
 
 [dependencies]
 hxo-types = { workspace = true }
+hxo-ir = { workspace = true }
+hxo-parser = { workspace = true }
+hxo-parser-expression = { workspace = true }
 serde = { workspace = true }

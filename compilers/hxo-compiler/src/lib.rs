@@ -32,14 +32,24 @@ pub struct CompileOptions {
     pub i18n_locale: Option<String>,
 }
 
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Compiler {
     pub fn new() -> Self {
         let mut registry = ParserRegistry::new();
 
         // Register default parsers
-        registry.register_template_parser(Arc::new(hxo_parser_template::TemplateParser));
+        registry.register_template_parser("hxo", Arc::new(hxo_parser_template::TemplateParser));
+        registry.register_template_parser("html", Arc::new(hxo_parser_template::TemplateParser));
+        registry.register_template_parser("pug", Arc::new(hxo_parser_pug::PugParser));
+        registry.register_template_parser("markdown", Arc::new(hxo_parser_markdown::MarkdownParser));
+        registry.register_template_parser("md", Arc::new(hxo_parser_markdown::MarkdownParser));
 
-        let ts_parser = Arc::new(hxo_parser_typescript::JsTsParser);
+        let ts_parser = Arc::new(hxo_parser_expression::ExprParser);
         registry.register_script_parser("ts", ts_parser.clone());
         registry.register_script_parser("typescript", ts_parser.clone());
         registry.register_script_parser("js", ts_parser.clone());
@@ -73,6 +83,12 @@ impl Compiler {
 
         let less_parser = Arc::new(hxo_parser_less::LessParser);
         registry.register_style_parser("less", less_parser);
+
+        let stylus_parser = Arc::new(hxo_parser_stylus::StylusParser);
+        registry.register_style_parser("stylus", stylus_parser);
+
+        let tailwind_parser = Arc::new(hxo_parser_tailwind::TailwindParser);
+        registry.register_style_parser("tailwind", tailwind_parser);
 
         Self { registry: Arc::new(registry), last_css: String::new() }
     }
@@ -119,14 +135,10 @@ impl Compiler {
             (code, Some(sm))
         };
 
-        // 5. Inject generated CSS if any
+        // 5. Get all generated CSS (includes both utility classes and <style> block contents)
         self.last_css = optimizer.get_css();
 
-        Ok(CompileResult {
-            code,
-            css: self.last_css.clone(),
-            source_map,
-        })
+        Ok(CompileResult { code, css: self.last_css.clone(), source_map })
     }
 
     pub fn get_css(&self) -> String {

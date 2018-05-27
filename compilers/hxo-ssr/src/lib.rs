@@ -11,7 +11,15 @@ impl SsrBackend {
     pub fn new() -> Self {
         Self { runtime_path: "@hxo".to_string() }
     }
+}
 
+impl Default for SsrBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SsrBackend {
     pub fn generate(&self, ir: &IRModule) -> Result<String> {
         let mut writer = JsWriter::new();
         let mut used_core = HashSet::new();
@@ -42,7 +50,7 @@ impl SsrBackend {
             if let Some(template) = &ir.template {
                 let mut node_index = 0;
                 for node in &template.nodes {
-                    self.generate_node_ssr(node, writer, &mut node_index);
+                    Self::generate_node_ssr(node, writer, &mut node_index);
                 }
             }
 
@@ -51,36 +59,41 @@ impl SsrBackend {
         Ok(())
     }
 
-    fn generate_node_ssr(&self, node: &TemplateNodeIR, writer: &mut JsWriter, node_index: &mut usize) {
+    fn generate_node_ssr(node: &TemplateNodeIR, writer: &mut JsWriter, node_index: &mut usize) {
         match node {
             TemplateNodeIR::Element(el) => {
                 let current_index = *node_index;
                 *node_index += 1;
 
-                writer.write(&format!("html += '<{}';", el.tag));
+                let mut start_tag = format!("html += '<{}", el.tag);
 
                 // Add data-hxo-id for non-static elements or elements with dynamic content
                 if !el.is_static {
-                    writer.write(&format!(" data-hxo-id=\"{}\"", current_index));
+                    start_tag.push_str(&format!(" data-hxo-id=\"{}\"", current_index));
                 }
 
                 for attr in &el.attributes {
                     if !attr.is_directive {
                         if attr.is_dynamic {
-                            writer.write(&format!(" {}=\"' + ({}) + '\"", attr.name, attr.value.as_deref().unwrap_or("")));
+                            start_tag.push_str(&format!(
+                                " {}=\"' + ({}) + '\"",
+                                attr.name,
+                                attr.value.as_deref().unwrap_or("")
+                            ));
                         }
                         else {
                             match &attr.value {
-                                Some(v) => writer.write(&format!(" {}=\"{}\"", attr.name, v)),
-                                None => writer.write(&format!(" {}", attr.name)),
+                                Some(v) => start_tag.push_str(&format!(" {}=\"{}\"", attr.name, v)),
+                                None => start_tag.push_str(&format!(" {}", attr.name)),
                             }
                         }
                     }
                 }
-                writer.write_line(">';");
+                start_tag.push_str(">';");
+                writer.write_line(&start_tag);
 
                 for child in &el.children {
-                    self.generate_node_ssr(child, writer, node_index);
+                    Self::generate_node_ssr(child, writer, node_index);
                 }
 
                 writer.write_line(&format!("html += '</{}>';", el.tag));

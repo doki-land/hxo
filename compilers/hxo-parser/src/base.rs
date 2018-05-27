@@ -1,4 +1,4 @@
-pub use hxo_types::{Cursor, Position, Error, ErrorKind};
+pub use hxo_types::{Cursor, Error, ErrorKind, Position};
 use std::collections::HashMap;
 
 pub struct ParseState<'a> {

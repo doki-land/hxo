@@ -1,6 +1,7 @@
-use hxo_parser::{MetadataSubParser, ParseState};
+use hxo_parser::{MetadataParser, ParseState};
 use hxo_types::{HxoValue, Result, Span};
 
+#[derive(Default)]
 pub struct TomlParser;
 
 impl TomlParser {
@@ -17,12 +18,12 @@ impl TomlParser {
     }
 }
 
-impl MetadataSubParser for TomlParser {
+impl MetadataParser for TomlParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<HxoValue> {
         let content = state.cursor.source;
         let value: serde_json::Value = toml::from_str(content)
             .map_err(|e| hxo_types::Error::external_error("TOML".to_string(), e.to_string(), Span::unknown()))?;
-        
+
         Ok(convert_json_to_hxo(value))
     }
 }
@@ -34,7 +35,8 @@ fn convert_json_to_hxo(value: serde_json::Value) -> HxoValue {
         serde_json::Value::Number(n) => {
             if let Some(f) = n.as_f64() {
                 HxoValue::Number(f)
-            } else {
+            }
+            else {
                 HxoValue::Number(0.0)
             }
         }

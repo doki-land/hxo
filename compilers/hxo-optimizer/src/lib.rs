@@ -7,20 +7,22 @@ pub struct Optimizer {
     pub style_engine: StyleEngine,
 }
 
+impl Default for Optimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Optimizer {
     pub fn new() -> Self {
         Self { style_engine: StyleEngine::new() }
-    }
-
-    pub fn default() -> Self {
-        Self::new()
     }
 
     pub fn optimize(&mut self, ir: &mut IRModule, locale: Option<&str>, is_prod: bool) {
         // 1. Static analysis
         if let Some(template) = &mut ir.template {
             for node in &mut template.nodes {
-                self.optimize_node(node);
+                Self::optimize_node(node);
             }
         }
 
@@ -28,17 +30,17 @@ impl Optimizer {
         if let Some(_locale_val) = locale {
             // Load messages for locale
             let messages = HashMap::new(); // In real case, load from locale files
-            self.optimize_i18n(ir, &messages);
+            Self::optimize_i18n(ir, &messages);
         }
 
         // 3. Call count tracking for inlining decisions
         let mut call_counts = HashMap::new();
         if let Some(script) = &ir.script {
-            self.track_script_calls(script, &mut call_counts);
+            Self::track_script_calls(script, &mut call_counts);
         }
         if let Some(template) = &ir.template {
             for node in &template.nodes {
-                self.track_node_calls(node, &mut call_counts);
+                Self::track_node_calls(node, &mut call_counts);
             }
         }
 
@@ -51,12 +53,90 @@ impl Optimizer {
         if let Some(template) = &ir.template {
             self.collect_styles_from_nodes(&template.nodes)?;
         }
+
+        if let Some(script) = &ir.script {
+            self.collect_styles_from_script(script)?;
+        }
+
+        for style in &ir.styles {
+            // All style parsers (css, scss, tailwind, etc.) return CSS code.
+            // We just need to collect it.
+            self.style_engine.add_raw_css(&style.code);
+        }
+        Ok(())
+    }
+
+    fn collect_styles_from_script(&mut self, script: &hxo_ir::JsProgram) -> Result<()> {
+        for stmt in &script.body {
+            self.collect_styles_from_stmt(stmt)?;
+        }
+        Ok(())
+    }
+
+    fn collect_styles_from_stmt(&mut self, stmt: &JsStmt) -> Result<()> {
+        match stmt {
+            JsStmt::Expr(expr, _) => self.collect_styles_from_expr(expr)?,
+            JsStmt::VariableDecl { init: Some(expr), .. } => {
+                self.collect_styles_from_expr(expr)?;
+            }
+            JsStmt::FunctionDecl { body, .. } => {
+                for s in body {
+                    self.collect_styles_from_stmt(s)?;
+                }
+            }
+            JsStmt::Export { declaration, .. } => {
+                self.collect_styles_from_stmt(declaration)?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn collect_styles_from_expr(&mut self, expr: &JsExpr) -> Result<()> {
+        match expr {
+            JsExpr::Literal(HxoValue::String(s), _) => {
+                self.style_engine.add_styles(s);
+            }
+            JsExpr::Call { callee, args, span: _ } => {
+                if let JsExpr::Identifier(id, _) = &**callee {
+                    if id == "addStyle" {
+                        for arg in args {
+                            if let JsExpr::Literal(HxoValue::String(s), _) = arg {
+                                self.style_engine.add_styles(s);
+                            }
+                        }
+                    }
+                }
+                self.collect_styles_from_expr(callee)?;
+                for arg in args {
+                    self.collect_styles_from_expr(arg)?;
+                }
+            }
+            JsExpr::Binary { left, right, .. } => {
+                self.collect_styles_from_expr(left)?;
+                self.collect_styles_from_expr(right)?;
+            }
+            JsExpr::Unary { argument, .. } => {
+                self.collect_styles_from_expr(argument)?;
+            }
+            JsExpr::Array(elements, _) => {
+                for el in elements {
+                    self.collect_styles_from_expr(el)?;
+                }
+            }
+            JsExpr::Object(props, _) => {
+                for val in props.values() {
+                    self.collect_styles_from_expr(val)?;
+                }
+            }
+            _ => {}
+        }
         Ok(())
     }
 
     pub fn apply_scope_id(&mut self, ir: &mut IRModule, scope_id: &str) {
         if let Some(template) = &mut ir.template {
-            self.apply_scope_id_to_nodes(&mut template.nodes, scope_id);
+            Self::apply_scope_id_to_nodes(&mut template.nodes, scope_id);
         }
 
         // Also transform scoped styles
@@ -84,24 +164,26 @@ impl Optimizer {
 
     fn collect_styles_from_nodes(&mut self, nodes: &[TemplateNodeIR]) -> Result<()> {
         for node in nodes {
-            match node {
-                TemplateNodeIR::Element(el) => {
-                    for attr in &el.attributes {
-                        if attr.name == "class" {
-                            if let Some(value) = &attr.value {
-                                self.style_engine.parse_classes(value, attr.span)?;
-                            }
+            if let TemplateNodeIR::Element(el) = node {
+                for attr in &el.attributes {
+                    if attr.name == "class" {
+                        if let Some(value) = &attr.value {
+                            self.style_engine.parse_classes(value, attr.span)?;
                         }
                     }
-                    self.collect_styles_from_nodes(&el.children)?;
+                    else if attr.name == ":class" {
+                        if let Some(expr) = &attr.value_ast {
+                            self.collect_styles_from_expr(expr)?;
+                        }
+                    }
                 }
-                _ => {}
+                self.collect_styles_from_nodes(&el.children)?;
             }
         }
         Ok(())
     }
 
-    fn apply_scope_id_to_nodes(&self, nodes: &mut [TemplateNodeIR], scope_id: &str) {
+    fn apply_scope_id_to_nodes(nodes: &mut [TemplateNodeIR], scope_id: &str) {
         for node in nodes {
             if let TemplateNodeIR::Element(el) = node {
                 el.attributes.push(AttributeIR {
@@ -112,7 +194,7 @@ impl Optimizer {
                     is_dynamic: false,
                     span: hxo_types::Span::unknown(),
                 });
-                self.apply_scope_id_to_nodes(&mut el.children, scope_id);
+                Self::apply_scope_id_to_nodes(&mut el.children, scope_id);
             }
         }
     }
@@ -144,97 +226,96 @@ impl Optimizer {
         result
     }
 
-    fn track_script_calls(&self, script: &hxo_ir::JsProgram, counts: &mut HashMap<String, usize>) {
+    fn track_script_calls(script: &hxo_ir::JsProgram, counts: &mut HashMap<String, usize>) {
         for stmt in &script.body {
-            self.track_stmt_calls(stmt, counts);
+            Self::track_stmt_calls(stmt, counts);
         }
     }
 
-    fn track_node_calls(&self, node: &TemplateNodeIR, counts: &mut HashMap<String, usize>) {
+    fn track_node_calls(node: &TemplateNodeIR, counts: &mut HashMap<String, usize>) {
         match node {
             TemplateNodeIR::Element(el) => {
                 for attr in &el.attributes {
                     if let Some(expr) = &attr.value_ast {
-                        self.track_expr_calls(expr, counts);
+                        Self::track_expr_calls(expr, counts);
                     }
                 }
                 for child in &el.children {
-                    self.track_node_calls(child, counts);
+                    Self::track_node_calls(child, counts);
                 }
             }
             TemplateNodeIR::Interpolation(expr) => {
                 if let Some(ast) = &expr.ast {
-                    self.track_expr_calls(ast, counts);
+                    Self::track_expr_calls(ast, counts);
                 }
             }
             _ => {}
         }
     }
 
-    fn track_stmt_calls(&self, stmt: &JsStmt, counts: &mut HashMap<String, usize>) {
+    fn track_stmt_calls(stmt: &JsStmt, counts: &mut HashMap<String, usize>) {
         match stmt {
-            JsStmt::Expr(expr, _) => self.track_expr_calls(expr, counts),
-            JsStmt::VariableDecl { init, .. } => {
-                if let Some(expr) = init {
-                    self.track_expr_calls(expr, counts);
-                }
+            JsStmt::Expr(expr, _) => Self::track_expr_calls(expr, counts),
+            JsStmt::VariableDecl { init: Some(expr), .. } => {
+                Self::track_expr_calls(expr, counts);
             }
             JsStmt::FunctionDecl { body, .. } => {
                 for s in body {
-                    self.track_stmt_calls(s, counts);
+                    Self::track_stmt_calls(s, counts);
                 }
             }
             JsStmt::Export { declaration, .. } => {
-                self.track_stmt_calls(declaration, counts);
+                Self::track_stmt_calls(declaration, counts);
             }
             _ => {}
         }
     }
 
-    fn track_expr_calls(&self, expr: &JsExpr, counts: &mut HashMap<String, usize>) {
+    fn track_expr_calls(expr: &JsExpr, counts: &mut HashMap<String, usize>) {
         match expr {
             JsExpr::Call { callee, args, .. } => {
                 if let JsExpr::Identifier(id, _) = &**callee {
                     let count = counts.entry(id.clone()).or_insert(0);
                     *count += 1;
                 }
-                self.track_expr_calls(callee, counts);
+                Self::track_expr_calls(callee, counts);
                 for arg in args {
-                    self.track_expr_calls(arg, counts);
+                    Self::track_expr_calls(arg, counts);
                 }
             }
             JsExpr::Binary { left, right, .. } => {
-                self.track_expr_calls(left, counts);
-                self.track_expr_calls(right, counts);
+                Self::track_expr_calls(left, counts);
+                Self::track_expr_calls(right, counts);
+            }
+            JsExpr::Unary { argument, .. } => {
+                Self::track_expr_calls(argument, counts);
             }
             JsExpr::Array(elements, _) => {
                 for el in elements {
-                    self.track_expr_calls(el, counts);
+                    Self::track_expr_calls(el, counts);
                 }
             }
             JsExpr::Object(props, _) => {
                 for val in props.values() {
-                    self.track_expr_calls(val, counts);
+                    Self::track_expr_calls(val, counts);
                 }
             }
             _ => {}
         }
     }
 
-    fn _is_pure_function(&self, body: &[JsStmt]) -> bool {
+    fn _is_pure_function(body: &[JsStmt]) -> bool {
         // Very conservative purity check
         for stmt in body {
             match stmt {
                 JsStmt::Expr(expr, _) => {
-                    if !self._is_pure_expr(expr) {
+                    if !Self::_is_pure_expr(expr) {
                         return false;
                     }
                 }
-                JsStmt::VariableDecl { init, .. } => {
-                    if let Some(init_expr) = init {
-                        if !self._is_pure_expr(init_expr) {
-                            return false;
-                        }
+                JsStmt::VariableDecl { init: Some(init_expr), .. } => {
+                    if !Self::_is_pure_expr(init_expr) {
+                        return false;
                     }
                 }
                 _ => return false,
@@ -243,13 +324,14 @@ impl Optimizer {
         true
     }
 
-    fn _is_pure_expr(&self, expr: &JsExpr) -> bool {
+    fn _is_pure_expr(expr: &JsExpr) -> bool {
         match expr {
             JsExpr::Literal(_, _) => true,
             JsExpr::Identifier(_, _) => true,
-            JsExpr::Binary { left, right, .. } => self._is_pure_expr(left) && self._is_pure_expr(right),
-            JsExpr::Array(elements, _) => elements.iter().all(|e| self._is_pure_expr(e)),
-            JsExpr::Object(properties, _) => properties.values().all(|e| self._is_pure_expr(e)),
+            JsExpr::Binary { left, right, .. } => Self::_is_pure_expr(left) && Self::_is_pure_expr(right),
+            JsExpr::Unary { argument, .. } => Self::_is_pure_expr(argument),
+            JsExpr::Array(elements, _) => elements.iter().all(Self::_is_pure_expr),
+            JsExpr::Object(properties, _) => properties.values().all(Self::_is_pure_expr),
             JsExpr::Call { .. } => {
                 // Only consider it pure if we know the callee is pure (simplified)
                 false
@@ -258,27 +340,27 @@ impl Optimizer {
         }
     }
 
-    pub fn optimize_i18n(&self, ir: &mut IRModule, messages: &HashMap<String, String>) {
+    pub fn optimize_i18n(ir: &mut IRModule, messages: &HashMap<String, String>) {
         // Optimize template
         if let Some(template) = &mut ir.template {
             for node in &mut template.nodes {
-                self.optimize_node_i18n(node, messages);
+                Self::optimize_node_i18n(node, messages);
             }
         }
         // Optimize script (simplified: only handle simple $t('key') calls)
         if let Some(script) = &mut ir.script {
             for stmt in &mut script.body {
-                self.optimize_stmt_i18n(stmt, messages);
+                Self::optimize_stmt_i18n(stmt, messages);
             }
         }
     }
 
-    fn optimize_node_i18n(&self, node: &mut TemplateNodeIR, messages: &HashMap<String, String>) {
+    fn optimize_node_i18n(node: &mut TemplateNodeIR, messages: &HashMap<String, String>) {
         match node {
             TemplateNodeIR::Element(el) => {
                 for attr in &mut el.attributes {
                     if let Some(ast) = &mut attr.value_ast {
-                        self.optimize_expr_i18n(ast, messages);
+                        Self::optimize_expr_i18n(ast, messages);
                         // Update value if it's now a literal
                         if let JsExpr::Literal(HxoValue::String(s), _) = ast {
                             attr.value = Some(format!("'{}'", s));
@@ -286,12 +368,12 @@ impl Optimizer {
                     }
                 }
                 for child in &mut el.children {
-                    self.optimize_node_i18n(child, messages);
+                    Self::optimize_node_i18n(child, messages);
                 }
             }
             TemplateNodeIR::Interpolation(expr) => {
                 if let Some(ast) = &mut expr.ast {
-                    self.optimize_expr_i18n(ast, messages);
+                    Self::optimize_expr_i18n(ast, messages);
                     // Simplified: update code string if it's now a literal
                     if let JsExpr::Literal(HxoValue::String(s), _) = ast {
                         expr.code = format!("'{}'", s);
@@ -302,27 +384,25 @@ impl Optimizer {
         }
     }
 
-    fn optimize_stmt_i18n(&self, stmt: &mut JsStmt, messages: &HashMap<String, String>) {
+    fn optimize_stmt_i18n(stmt: &mut JsStmt, messages: &HashMap<String, String>) {
         match stmt {
-            JsStmt::Expr(expr, _) => self.optimize_expr_i18n(expr, messages),
-            JsStmt::VariableDecl { init, .. } => {
-                if let Some(expr) = init {
-                    self.optimize_expr_i18n(expr, messages);
-                }
+            JsStmt::Expr(expr, _) => Self::optimize_expr_i18n(expr, messages),
+            JsStmt::VariableDecl { init: Some(expr), .. } => {
+                Self::optimize_expr_i18n(expr, messages);
             }
             JsStmt::FunctionDecl { body, .. } => {
                 for s in body {
-                    self.optimize_stmt_i18n(s, messages);
+                    Self::optimize_stmt_i18n(s, messages);
                 }
             }
             JsStmt::Export { declaration, .. } => {
-                self.optimize_stmt_i18n(declaration, messages);
+                Self::optimize_stmt_i18n(declaration, messages);
             }
             _ => {}
         }
     }
 
-    fn optimize_expr_i18n(&self, expr: &mut JsExpr, messages: &HashMap<String, String>) {
+    fn optimize_expr_i18n(expr: &mut JsExpr, messages: &HashMap<String, String>) {
         match expr {
             JsExpr::Call { callee, args, .. } => {
                 if let JsExpr::Identifier(id, _) = &**callee {
@@ -336,48 +416,45 @@ impl Optimizer {
                     }
                 }
                 for arg in args {
-                    self.optimize_expr_i18n(arg, messages);
+                    Self::optimize_expr_i18n(arg, messages);
                 }
             }
             JsExpr::Binary { left, right, .. } => {
-                self.optimize_expr_i18n(left, messages);
-                self.optimize_expr_i18n(right, messages);
+                Self::optimize_expr_i18n(left, messages);
+                Self::optimize_expr_i18n(right, messages);
             }
             JsExpr::Array(elements, _) => {
                 for el in elements {
-                    self.optimize_expr_i18n(el, messages);
+                    Self::optimize_expr_i18n(el, messages);
                 }
             }
             JsExpr::Object(props, _) => {
                 for val in props.values_mut() {
-                    self.optimize_expr_i18n(val, messages);
+                    Self::optimize_expr_i18n(val, messages);
                 }
             }
             _ => {}
         }
     }
 
-    fn optimize_node(&self, node: &mut TemplateNodeIR) {
-        match node {
-            TemplateNodeIR::Element(el) => {
-                // Optimize children first
-                for child in &mut el.children {
-                    self.optimize_node(child);
-                }
-
-                // An element is static if it has no dynamic attributes
-                // and all its children are static (text or static elements)
-                let has_dynamic_attr = el.attributes.iter().any(|a| a.is_dynamic);
-                let all_children_static = el.children.iter().all(|c| match c {
-                    TemplateNodeIR::Text(_, _) => true,
-                    TemplateNodeIR::Element(child_el) => child_el.is_static,
-                    TemplateNodeIR::Comment(_, _) => true,
-                    TemplateNodeIR::Interpolation(_) => false,
-                });
-
-                el.is_static = !has_dynamic_attr && all_children_static;
+    fn optimize_node(node: &mut TemplateNodeIR) {
+        if let TemplateNodeIR::Element(el) = node {
+            // Optimize children first
+            for child in &mut el.children {
+                Self::optimize_node(child);
             }
-            _ => {}
+
+            // An element is static if it has no dynamic attributes
+            // and all its children are static (text or static elements)
+            let has_dynamic_attr = el.attributes.iter().any(|a| a.is_dynamic);
+            let all_children_static = el.children.iter().all(|c| match c {
+                TemplateNodeIR::Text(_, _) => true,
+                TemplateNodeIR::Element(child_el) => child_el.is_static,
+                TemplateNodeIR::Comment(_, _) => true,
+                TemplateNodeIR::Interpolation(_) => false,
+            });
+
+            el.is_static = !has_dynamic_attr && all_children_static;
         }
     }
 }

@@ -1,5 +1,5 @@
-use hxo_ir::{AttributeIR, ElementIR, IRModule, TemplateIR, TemplateNodeIR};
 use hxo_hydrate::HydrateBackend;
+use hxo_ir::{AttributeIR, ElementIR, IRModule, TemplateIR, TemplateNodeIR};
 use hxo_types::Span;
 use std::collections::HashMap;
 

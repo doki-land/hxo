@@ -25,7 +25,9 @@
             "beginCaptures": {
                 "1": { "name": "punctuation.definition.tag.html" },
                 "2": { "name": "entity.name.tag.html" },
-                "3": { "patterns": [{ "include": "text.html.basic#tag-stuff" }] },
+                "3": {
+                    "patterns": [{ "include": "text.html.basic#tag-stuff" }]
+                },
                 "4": { "name": "punctuation.definition.tag.html" }
             },
             "end": "(</)(script)(>)",
@@ -46,7 +48,9 @@
             "beginCaptures": {
                 "1": { "name": "punctuation.definition.tag.html" },
                 "2": { "name": "entity.name.tag.html" },
-                "3": { "patterns": [{ "include": "text.html.basic#tag-stuff" }] },
+                "3": {
+                    "patterns": [{ "include": "text.html.basic#tag-stuff" }]
+                },
                 "4": { "name": "punctuation.definition.tag.html" }
             },
             "end": "(</)(style)(>)",
@@ -67,7 +71,9 @@
             "beginCaptures": {
                 "1": { "name": "punctuation.definition.tag.html" },
                 "2": { "name": "entity.name.tag.html" },
-                "3": { "patterns": [{ "include": "text.html.basic#tag-stuff" }] },
+                "3": {
+                    "patterns": [{ "include": "text.html.basic#tag-stuff" }]
+                },
                 "4": { "name": "punctuation.definition.tag.html" }
             },
             "end": "(</)(i18n)(>)",

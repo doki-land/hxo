@@ -1,4 +1,4 @@
-use hxo_parser::{ParseState, StyleSubParser};
+use hxo_parser::{ParseState, StyleParser};
 use hxo_types::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -16,10 +16,54 @@ pub fn compile(source: &str, _options: &ScssParserOptions) -> Result<String> {
 
 pub struct ScssParser;
 
-impl StyleSubParser for ScssParser {
+impl StyleParser for ScssParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<String> {
         let mut parser = ScssParserImpl { state, variables: HashMap::new() };
         parser.parse()
+    }
+}
+
+#[derive(Debug, Clone)]
+enum CssExpr {
+    Number(f64, String),
+    Variable(String),
+    Binary(Box<CssExpr>, String, Box<CssExpr>),
+    Raw(String),
+}
+
+impl CssExpr {
+    fn to_string(&self, variables: &HashMap<String, String>) -> String {
+        match self {
+            CssExpr::Number(n, unit) => format!("{}{}", n, unit),
+            CssExpr::Variable(name) => variables.get(name).cloned().unwrap_or_else(|| format!("${}", name)),
+            CssExpr::Binary(left, op, right) => {
+                let l = left.to_string(variables);
+                let r = right.to_string(variables);
+                // Simple evaluation if both are numbers and have same unit
+                if let (CssExpr::Number(ln, lu), CssExpr::Number(rn, ru)) = (&**left, &**right) {
+                    if lu == ru || ru.is_empty() || lu.is_empty() {
+                        let unit = if lu.is_empty() { ru } else { lu };
+                        let res = match op.as_str() {
+                            "+" => ln + rn,
+                            "-" => ln - rn,
+                            "*" => ln * rn,
+                            "/" => {
+                                if *rn != 0.0 {
+                                    ln / rn
+                                }
+                                else {
+                                    0.0
+                                }
+                            }
+                            _ => 0.0,
+                        };
+                        return format!("{}{}", res, unit);
+                    }
+                }
+                format!("{} {} {}", l, op, r)
+            }
+            CssExpr::Raw(s) => s.clone(),
+        }
     }
 }
 
@@ -92,9 +136,12 @@ impl<'a, 'b> ScssParserImpl<'a, 'b> {
         self.state.cursor.skip_whitespace();
         self.state.cursor.expect(':')?;
         self.state.cursor.skip_whitespace();
-        let value = self.consume_until(';')?;
-        self.state.cursor.expect(';')?;
-        self.variables.insert(name, value.trim().to_string());
+        let expr = self.parse_expression()?;
+        self.state.cursor.skip_whitespace();
+        if self.state.cursor.peek() == ';' {
+            self.state.cursor.consume();
+        }
+        self.variables.insert(name, expr.to_string(&self.variables));
         Ok(())
     }
 
@@ -121,15 +168,13 @@ impl<'a, 'b> ScssParserImpl<'a, 'b> {
                 let prop = self.consume_until(':')?;
                 self.state.cursor.expect(':')?;
                 self.state.cursor.skip_whitespace();
-                let val = self.consume_until(';')?;
-                self.state.cursor.expect(';')?;
-
-                let mut processed_val = val.trim().to_string();
-                // Replace variables
-                for (name, var_val) in &self.variables {
-                    processed_val = processed_val.replace(&format!("${}", name), var_val);
+                let expr = self.parse_expression()?;
+                self.state.cursor.skip_whitespace();
+                if self.state.cursor.peek() == ';' {
+                    self.state.cursor.consume();
                 }
 
+                let processed_val = expr.to_string(&self.variables);
                 declarations.push(format!("  {}: {};\n", prop.trim(), processed_val));
             }
             else {
@@ -152,6 +197,85 @@ impl<'a, 'b> ScssParserImpl<'a, 'b> {
 
         selector_stack.pop();
         Ok(output)
+    }
+
+    fn parse_expression(&mut self) -> Result<CssExpr> {
+        self.parse_pratt_expr(0)
+    }
+
+    fn parse_pratt_expr(&mut self, min_precedence: i32) -> Result<CssExpr> {
+        self.state.cursor.skip_whitespace();
+        let mut left = self.parse_nud()?;
+
+        loop {
+            self.state.cursor.skip_whitespace();
+            let op = self.peek_operator();
+            if op.is_empty() {
+                break;
+            }
+
+            let precedence = self.get_precedence(&op);
+            if precedence <= min_precedence {
+                break;
+            }
+
+            self.state.cursor.consume_n(op.len());
+            let right = self.parse_pratt_expr(precedence)?;
+            left = CssExpr::Binary(Box::new(left), op, Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_nud(&mut self) -> Result<CssExpr> {
+        let c = self.state.cursor.peek();
+        if c == '$' {
+            self.state.cursor.consume();
+            let name = self.consume_ident()?;
+            Ok(CssExpr::Variable(name))
+        }
+        else if c.is_numeric() {
+            let start = self.state.cursor.pos;
+            while !self.state.cursor.is_eof() && (self.state.cursor.peek().is_numeric() || self.state.cursor.peek() == '.') {
+                self.state.cursor.consume();
+            }
+            let n = self.state.cursor.current_str(start).parse().unwrap_or(0.0);
+            let unit_start = self.state.cursor.pos;
+            while !self.state.cursor.is_eof() && self.state.cursor.peek().is_alphabetic() {
+                self.state.cursor.consume();
+            }
+            let unit = self.state.cursor.current_str(unit_start).to_string();
+            Ok(CssExpr::Number(n, unit))
+        }
+        else if c == '(' {
+            self.state.cursor.consume();
+            let expr = self.parse_expression()?;
+            self.state.cursor.expect(')')?;
+            Ok(expr)
+        }
+        else {
+            let start = self.state.cursor.pos;
+            while !self.state.cursor.is_eof()
+                && !";)}".contains(self.state.cursor.peek())
+                && !"+-*/".contains(self.state.cursor.peek())
+            {
+                self.state.cursor.consume();
+            }
+            Ok(CssExpr::Raw(self.state.cursor.current_str(start).trim().to_string()))
+        }
+    }
+
+    fn get_precedence(&self, op: &str) -> i32 {
+        match op {
+            "+" | "-" => 1,
+            "*" | "/" => 2,
+            _ => 0,
+        }
+    }
+
+    fn peek_operator(&self) -> String {
+        let c = self.state.cursor.peek();
+        if "+-*/".contains(c) { c.to_string() } else { "".to_string() }
     }
 
     fn is_property(&self) -> bool {

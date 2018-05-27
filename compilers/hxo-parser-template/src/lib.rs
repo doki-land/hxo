@@ -1,5 +1,5 @@
 use hxo_ir::{AttributeIR, ElementIR, ExpressionIR, TemplateNodeIR};
-use hxo_parser::{ParseState, TemplateSubParser};
+use hxo_parser::{ParseState, TemplateParser};
 use hxo_types::{Result, Span, is_void_element};
 
 pub struct TemplateParser;
@@ -7,11 +7,11 @@ pub struct TemplateParser;
 pub fn parse(source: &str) -> Result<Vec<TemplateNodeIR>> {
     let mut state = ParseState::new(source);
     let parser = TemplateParser;
-    parser.parse(&mut state)
+    parser.parse(&mut state, "html")
 }
 
-impl TemplateSubParser for TemplateParser {
-    fn parse(&self, state: &mut ParseState) -> Result<Vec<TemplateNodeIR>> {
+impl TemplateParser for TemplateParser {
+    fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<Vec<TemplateNodeIR>> {
         let mut parser = TemplateParserImpl { state };
         parser.parse()
     }
@@ -74,13 +74,20 @@ impl<'a, 'b> TemplateParserImpl<'a, 'b> {
 
             let is_directive = attr_name.starts_with(':') || attr_name.starts_with('@') || attr_name.starts_with("v-");
 
-            let is_dynamic = is_directive || attr_name == "class" || attr_name == "style"; // class/style can be dynamic in some contexts, but let's keep it simple
+            let is_dynamic = is_directive || attr_name == "class" || attr_name == "style";
+
+            let value_ast = if is_dynamic {
+                attr_value.as_ref().and_then(|val| hxo_parser_expression::parse_expression(val).ok())
+            }
+            else {
+                None
+            };
 
             let attr_end = self.state.cursor.position();
             attributes.push(AttributeIR {
                 name: attr_name,
                 value: attr_value,
-                value_ast: None,
+                value_ast,
                 is_directive,
                 is_dynamic,
                 span: Span { start: attr_start, end: attr_end },
@@ -140,11 +147,9 @@ impl<'a, 'b> TemplateParserImpl<'a, 'b> {
         self.state.cursor.expect_str("}}")?;
         let end_pos = self.state.cursor.position();
 
-        Ok(TemplateNodeIR::Interpolation(ExpressionIR {
-            code: content,
-            ast: None,
-            span: Span { start: start_pos, end: end_pos },
-        }))
+        let ast = hxo_parser_expression::parse_expression(&content).ok();
+
+        Ok(TemplateNodeIR::Interpolation(ExpressionIR { code: content, ast, span: Span { start: start_pos, end: end_pos } }))
     }
 
     fn parse_text(&mut self) -> Result<TemplateNodeIR> {

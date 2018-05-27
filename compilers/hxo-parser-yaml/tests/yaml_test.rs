@@ -1,4 +1,4 @@
-use hxo_parser_yaml::{parse_yaml, parse_router};
+use hxo_parser_yaml::{parse_router, parse_yaml};
 use hxo_types::HxoValue;
 
 #[test]

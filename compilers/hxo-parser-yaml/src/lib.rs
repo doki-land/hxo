@@ -1,10 +1,10 @@
-use hxo_parser::{MetadataSubParser, ParseState};
-use hxo_types::{HxoValue, Result, RouterConfig, Route, Span};
+use hxo_parser::{MetadataParser, ParseState};
+use hxo_types::{HxoValue, Result, Route, RouterConfig, Span};
 use std::collections::HashMap;
 
 pub struct YamlParser;
 
-impl MetadataSubParser for YamlParser {
+impl MetadataParser for YamlParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<HxoValue> {
         let mut parser = YamlParserImpl { state };
         parser.parse_yaml()
@@ -15,17 +15,14 @@ pub fn parse_router(source: &str) -> Result<RouterConfig> {
     let value = parse(source)?;
     match value {
         HxoValue::Object(map) => {
-            let routes_val = map.get("routes").ok_or_else(|| hxo_types::Error::parse_error("Missing routes".to_string(), Span::default()))?;
+            let routes_val = map
+                .get("routes")
+                .ok_or_else(|| hxo_types::Error::parse_error("Missing routes".to_string(), Span::default()))?;
             let routes = parse_routes(routes_val)?;
             let mode = map.get("mode").and_then(|v| v.as_str()).unwrap_or("hash").to_string();
             let base = map.get("base").and_then(|v| v.as_str()).map(|s| s.to_string());
-            
-            Ok(RouterConfig {
-                routes,
-                mode,
-                base,
-                span: Span::default(),
-            })
+
+            Ok(RouterConfig { routes, mode, base, span: Span::default() })
         }
         _ => Err(hxo_types::Error::parse_error("Expected object for router config".to_string(), Span::default())),
     }
@@ -41,21 +38,10 @@ fn parse_routes(value: &HxoValue) -> Result<Vec<Route>> {
                     let component = map.get("component").and_then(|v| v.as_str()).unwrap_or("").to_string();
                     let name = map.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
                     let redirect = map.get("redirect").and_then(|v| v.as_str()).map(|s| s.to_string());
-                    let children = if let Some(children_val) = map.get("children") {
-                        Some(parse_routes(children_val)?)
-                    } else {
-                        None
-                    };
-                    
-                    routes.push(Route {
-                        path,
-                        component,
-                        name,
-                        redirect,
-                        children,
-                        meta: None,
-                        span: Span::default(),
-                    });
+                    let children =
+                        if let Some(children_val) = map.get("children") { Some(parse_routes(children_val)?) } else { None };
+
+                    routes.push(Route { path, component, name, redirect, children, meta: None, span: Span::default() });
                 }
             }
             Ok(routes)
@@ -87,17 +73,21 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
         }
         else {
             // Check if it's a map
+            let indent = self.get_indent();
             let line = self.peek_line();
-            if line.contains(':') { self.parse_map(0) } else { self.parse_scalar() }
+            if line.contains(':') { self.parse_map(indent) } else { self.parse_scalar() }
         }
     }
 
     fn parse_map(&mut self, indent: usize) -> Result<HxoValue> {
         let mut map = HashMap::new();
         while !self.state.cursor.is_eof() {
-            self.state.cursor.skip_whitespace();
-            if self.state.cursor.is_eof() {
-                break;
+            self.state.cursor.skip_spaces();
+            if self.state.cursor.is_eof() || self.state.cursor.peek() == '\n' {
+                if !self.state.cursor.is_eof() {
+                    self.state.cursor.consume(); // \n
+                }
+                continue;
             }
 
             let current_indent = self.get_indent();
@@ -110,15 +100,20 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
                 continue;
             }
 
+            // If we hit a '-' at the same indent as the current map, it's likely we're inside a list item
+            if self.state.cursor.peek() == '-' && current_indent == indent {
+                break;
+            }
+
             let key = self.consume_key()?;
             if key.is_empty() {
                 break;
             }
 
-            self.state.cursor.skip_whitespace();
+            self.state.cursor.skip_spaces();
             if self.state.cursor.peek() == ':' {
                 self.state.cursor.consume();
-                self.state.cursor.skip_whitespace();
+                self.state.cursor.skip_spaces();
 
                 let value = if self.state.cursor.peek() == '\n' || self.state.cursor.is_eof() {
                     self.state.cursor.skip_whitespace();
@@ -126,7 +121,7 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
                     if self.state.cursor.peek() == '-' {
                         self.parse_list()?
                     }
-                    else if next_indent > indent {
+                    else if next_indent > current_indent {
                         self.parse_map(next_indent)?
                     }
                     else {
@@ -137,9 +132,24 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
                     self.parse_list()?
                 }
                 else {
-                    self.parse_scalar()?
+                    let line = self.peek_line();
+                    if line.contains(':')
+                        && !line.starts_with('"')
+                        && !line.starts_with('\'')
+                        && !line.starts_with('{')
+                        && !line.starts_with('[')
+                    {
+                        let next_indent = self.get_indent();
+                        self.parse_map(next_indent)?
+                    }
+                    else {
+                        self.parse_scalar()?
+                    }
                 };
                 map.insert(key, value);
+            }
+            else {
+                break;
             }
         }
         Ok(HxoValue::Object(map))
@@ -150,9 +160,12 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
         let indent = self.get_indent();
 
         while !self.state.cursor.is_eof() {
-            self.state.cursor.skip_whitespace();
-            if self.state.cursor.is_eof() {
-                break;
+            self.state.cursor.skip_spaces();
+            if self.state.cursor.is_eof() || self.state.cursor.peek() == '\n' {
+                if !self.state.cursor.is_eof() {
+                    self.state.cursor.consume(); // \n
+                }
+                continue;
             }
 
             let current_indent = self.get_indent();
@@ -162,7 +175,7 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
 
             if self.state.cursor.peek() == '-' {
                 self.state.cursor.consume(); // -
-                self.state.cursor.skip_whitespace();
+                self.state.cursor.skip_spaces();
 
                 let value = if self.state.cursor.peek() == '\n' || self.state.cursor.is_eof() {
                     self.state.cursor.skip_whitespace();
@@ -170,7 +183,19 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
                     if next_indent > current_indent { self.parse_map(next_indent)? } else { HxoValue::Null }
                 }
                 else {
-                    self.parse_scalar()?
+                    let line = self.peek_line();
+                    if line.contains(':')
+                        && !line.starts_with('"')
+                        && !line.starts_with('\'')
+                        && !line.starts_with('{')
+                        && !line.starts_with('[')
+                    {
+                        let next_indent = self.get_indent();
+                        self.parse_map(next_indent)?
+                    }
+                    else {
+                        self.parse_scalar()?
+                    }
                 };
                 list.push(value);
             }
@@ -281,9 +306,9 @@ impl<'a, 'b> YamlParserImpl<'a, 'b> {
     }
 
     fn consume_value(&mut self) -> Result<String> {
-        self.state.cursor.skip_whitespace();
+        self.state.cursor.skip_spaces();
         let start = self.state.cursor.pos;
-        while !self.state.cursor.is_eof() && self.state.cursor.peek() != '\n' {
+        while !self.state.cursor.is_eof() && self.state.cursor.peek() != '\n' && self.state.cursor.peek() != '#' {
             self.state.cursor.consume();
         }
         Ok(self.state.cursor.source[start..self.state.cursor.pos].trim().to_string())

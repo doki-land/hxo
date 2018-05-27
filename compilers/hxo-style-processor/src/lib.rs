@@ -1,5 +1,6 @@
 use hxo_types::Result;
 
+#[derive(Default)]
 pub struct StyleProcessor;
 
 impl StyleProcessor {

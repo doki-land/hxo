@@ -11,14 +11,22 @@ impl HydrateBackend {
     pub fn new() -> Self {
         Self { runtime_path: "@hxo".to_string() }
     }
+}
 
+impl Default for HydrateBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HydrateBackend {
     pub fn generate(&self, ir: &IRModule) -> Result<String> {
         let mut writer = JsWriter::new();
         let mut used_core = HashSet::new();
 
         // 1. Generate Hydrate Function Body
         let mut body_writer = JsWriter::new();
-        self.generate_hydrate_body(ir, &mut body_writer, &mut used_core)?;
+        Self::generate_hydrate_body(ir, &mut body_writer, &mut used_core)?;
 
         // 2. Generate Imports
         if !used_core.is_empty() {
@@ -34,12 +42,12 @@ impl HydrateBackend {
         Ok(writer.finish().0)
     }
 
-    fn generate_hydrate_body(&self, ir: &IRModule, writer: &mut JsWriter, used_core: &mut HashSet<String>) -> Result<()> {
+    fn generate_hydrate_body(ir: &IRModule, writer: &mut JsWriter, used_core: &mut HashSet<String>) -> Result<()> {
         writer.write_block("export function hydrate(root, ctx)", |writer| {
             if let Some(template) = &ir.template {
                 let mut node_index = 0;
                 for node in &template.nodes {
-                    self.generate_node_hydrate(node, writer, &mut node_index, used_core);
+                    Self::generate_node_hydrate(node, writer, &mut node_index, used_core);
                 }
             }
         });
@@ -47,7 +55,6 @@ impl HydrateBackend {
     }
 
     fn generate_node_hydrate(
-        &self,
         node: &TemplateNodeIR,
         writer: &mut JsWriter,
         node_index: &mut usize,
@@ -76,7 +83,7 @@ impl HydrateBackend {
 
                     // Handle dynamic children
                     for child in &el.children {
-                        self.generate_node_hydrate(child, writer, node_index, used_core);
+                        Self::generate_node_hydrate(child, writer, node_index, used_core);
                     }
                 }
             }
@@ -89,7 +96,7 @@ impl HydrateBackend {
                     "const text{} = root.querySelector('[data-hxo-id=\"{}\"]');",
                     current_index, current_index
                 ));
-                writer.write_block(&format!("createEffect(() =>"), |writer| {
+                writer.write_block("createEffect(() =>", |writer| {
                     writer.write_line(&format!("text{}.textContent = {};", current_index, expr.code));
                 });
                 writer.write_line(");");

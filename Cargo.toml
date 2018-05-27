@@ -18,7 +18,7 @@ members = [
     "compilers/hxo-parser-tailwind",
     "compilers/hxo-parser-template",
     "compilers/hxo-parser-toml",
-    "compilers/hxo-parser-typescript",
+    "compilers/hxo-parser-expression",
     "compilers/hxo-parser-yaml",
     "compilers/hxo-parser-pug",
     "compilers/hxo-parser-properties",
@@ -33,7 +33,6 @@ members = [
     "compilers/hxo-target-css",
     "compilers/hxo-target-html",
     "compilers/hxo-target-js",
-    "compilers/hxo-target-map",
     "compilers/hxo-types",
     "compilers/hxo-wit",
 ]
@@ -64,7 +63,6 @@ hxo-target-js = { path = "compilers/hxo-target-js" }
 hxo-target-html = { path = "compilers/hxo-target-html" }
 hxo-target-css = { path = "compilers/hxo-target-css" }
 hxo-target-dts = { path = "compilers/hxo-target-dts" }
-hxo-target-map = { path = "compilers/hxo-target-map" }
 hxo-parser-css = { path = "compilers/hxo-parser-css" }
 hxo-parser-json = { path = "compilers/hxo-parser-json" }
 hxo-parser-less = { path = "compilers/hxo-parser-less" }
@@ -75,7 +73,7 @@ hxo-parser-stylus = { path = "compilers/hxo-parser-stylus" }
 hxo-parser-tailwind = { path = "compilers/hxo-parser-tailwind" }
 hxo-parser-template = { path = "compilers/hxo-parser-template" }
 hxo-parser-toml = { path = "compilers/hxo-parser-toml" }
-hxo-parser-typescript = { path = "compilers/hxo-parser-typescript" }
+hxo-parser-expression = { path = "compilers/hxo-parser-expression" }
 hxo-parser-yaml = { path = "compilers/hxo-parser-yaml" }
 hxo-parser-pug = { path = "compilers/hxo-parser-pug" }
 hxo-parser-properties = { path = "compilers/hxo-parser-properties" }

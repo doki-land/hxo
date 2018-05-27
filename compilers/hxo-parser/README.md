@@ -9,7 +9,7 @@ Core parser infrastructure for HXO framework
 ## 功能 (Features)
 
 - **SFC 分块解析**: 识别并提取 `<...>` 格式的顶层块。
-- **智能分发**: 根据 `lang` 属性自动选择 `hxo-parser-typescript`, `hxo-parser-scss` 等专用解析器。
+- **智能分发**: 根据 `lang` 属性自动选择 `hxo-parser-expression`, `hxo-parser-scss` 等专用解析器。
 - **统一输出**: 生成 `ParsedHxoFile`，包含所有已处理块的结构化数据。
 - **位置感知**: 在分块过程中保持精确的源码位置信息。
 
@@ -23,7 +23,7 @@ Core parser infrastructure for HXO framework
 ### 依赖项
 - `hxo-types`: 基础数据类型支持。
 - `hxo-parser-yaml`/`json`: 用于解析元数据块。
-- `hxo-parser-typescript`: 用于处理脚本块。
+- `hxo-parser-expression`: 用于处理脚本块。
 - `hxo-parser-scss`: 用于处理样式块。
 
 ### 测试

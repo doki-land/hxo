@@ -1,6 +1,7 @@
 use hxo_ir::{IRModule, StyleIR};
 use hxo_types::{CodeWriter, Result};
 
+#[derive(Default)]
 pub struct CssWriter {
     inner: CodeWriter,
 }
@@ -35,6 +36,7 @@ impl CssWriter {
     }
 }
 
+#[derive(Default)]
 pub struct CssCompiler {}
 
 impl CssCompiler {

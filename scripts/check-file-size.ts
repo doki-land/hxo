@@ -4,9 +4,26 @@ import path from "node:path";
 const WARNING_LIMIT = 800;
 const ERROR_LIMIT = 1000;
 
-const IGNORE_DIRS = ["node_modules", "target", ".git", "dist", "coverage", "lib"];
+const IGNORE_DIRS = [
+    "node_modules",
+    "target",
+    ".git",
+    "dist",
+    "coverage",
+    "lib",
+];
 
-const EXTENSIONS = [".ts", ".rs", ".js", ".tsx", ".jsx"];
+const EXTENSIONS = [
+    ".ts",
+    ".rs",
+    ".js",
+    ".tsx",
+    ".jsx",
+    ".hxo",
+    ".css",
+    ".scss",
+    ".html",
+];
 
 let errorCount = 0;
 let warningCount = 0;

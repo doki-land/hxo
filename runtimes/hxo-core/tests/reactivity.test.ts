@@ -1,19 +1,19 @@
-import { describe, it, expect, vi } from 'vitest';
-import { createSignal, createEffect, createComputed } from '../src/reactivity';
-import { nextTick } from '../src/scheduler';
+import { describe, expect, it, vi } from "vitest";
+import { createComputed, createEffect, createSignal } from "../src/reactivity";
+import { nextTick } from "../src/scheduler";
 
-describe('reactivity', () => {
-    it('should work with basic signal', () => {
+describe("reactivity", () => {
+    it("should work with basic signal", () => {
         const [count, setCount] = createSignal(0);
         expect(count()).toBe(0);
         setCount(1);
         expect(count()).toBe(1);
     });
 
-    it('should trigger effect when signal changes', async () => {
+    it("should trigger effect when signal changes", async () => {
         const [count, setCount] = createSignal(0);
         const spy = vi.fn();
-        
+
         createEffect(() => {
             spy(count());
         });
@@ -27,7 +27,7 @@ describe('reactivity', () => {
         expect(spy).toHaveBeenCalledTimes(2);
     });
 
-    it('should work with computed signal', async () => {
+    it("should work with computed signal", async () => {
         const [count, setCount] = createSignal(1);
         const doubled = createComputed(() => count() * 2);
 
@@ -38,7 +38,7 @@ describe('reactivity', () => {
         expect(doubled()).toBe(4);
     });
 
-    it('should handle nested effects', async () => {
+    it("should handle nested effects", async () => {
         const [count, setCount] = createSignal(0);
         const spy1 = vi.fn();
         const spy2 = vi.fn();
@@ -62,6 +62,6 @@ describe('reactivity', () => {
         expect(spy1).toHaveBeenCalledTimes(2);
         // Note: The nested effect will be re-created when the outer effect runs,
         // and it also runs once immediately upon creation.
-        expect(spy2).toHaveBeenCalledTimes(3); 
+        expect(spy2).toHaveBeenCalledTimes(3);
     });
 });

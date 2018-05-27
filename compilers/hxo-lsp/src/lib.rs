@@ -1,9 +1,9 @@
 use dashmap::{DashMap, DashSet};
 use hxo_ir::{ElementIR, ExpressionIR, JsExpr, JsProgram, JsStmt, TemplateNodeIR};
-use hxo_parser::{ParseState, ScriptSubParser, TemplateSubParser};
+use hxo_parser::{ParseState, ScriptParser, TemplateParser};
+use hxo_parser_expression::ExprParser;
 use hxo_parser_template::TemplateParser;
 use hxo_parser_toml::TomlParser;
-use hxo_parser_typescript::JsTsParser;
 use hxo_types::{Position as HxoPosition, Span as HxoSpan, is_pos_in_span};
 use serde::Deserialize;
 use tower_lsp::{Client, LanguageServer, LspService, Server, jsonrpc::Result, lsp_types::*};
@@ -126,8 +126,8 @@ impl LanguageServer for Backend {
 
             let mut state = ParseState::new(&content);
             let parser = TemplateParser;
-            if let Ok(nodes) = parser.parse(&mut state) {
-                if let Some(context) = self.get_completion_context(&nodes, hxo_pos) {
+            if let Ok(nodes) = parser.parse(&mut state, "html") {
+                if let Some(context) = Backend::get_completion_context(&nodes, hxo_pos) {
                     match context {
                         CompletionContext::Tag => {
                             // Basic HTML tags
@@ -174,7 +174,7 @@ impl LanguageServer for Backend {
                             }
 
                             // Script variables
-                            if let Some(program) = self.get_script_program(&nodes) {
+                            if let Some(program) = Self::get_script_program(&nodes) {
                                 for stmt in &program.body {
                                     if let JsStmt::VariableDecl { id, .. } = stmt {
                                         items.push(CompletionItem {
@@ -216,7 +216,7 @@ impl LanguageServer for Backend {
 
             let mut state = ParseState::new(&content);
             let parser = TemplateParser;
-            if let Ok(nodes) = parser.parse(&mut state) {
+            if let Ok(nodes) = parser.parse(&mut state, "html") {
                 return Ok(self.find_definition_in_nodes(&nodes, hxo_pos, &uri).await);
             }
         }
@@ -230,7 +230,7 @@ impl Backend {
         let mut diagnostics = Vec::new();
         if let Some(content) = self.documents.get(&uri.to_string()) {
             let mut compiler = hxo_compiler::Compiler::new();
-            let name = uri.path_segments().and_then(|s| s.last()).unwrap_or("App.hxo");
+            let name = uri.path_segments().and_then(|mut s| s.next_back()).unwrap_or("App.hxo");
 
             if let Err(e) = compiler.compile(name, &content) {
                 let span = e.span();
@@ -240,13 +240,10 @@ impl Backend {
                 else {
                     Range {
                         start: Position {
-                            line: span.start.line.saturating_sub(1) as u32,
-                            character: span.start.column.saturating_sub(1) as u32,
+                            line: span.start.line.saturating_sub(1),
+                            character: span.start.column.saturating_sub(1),
                         },
-                        end: Position {
-                            line: span.end.line.saturating_sub(1) as u32,
-                            character: span.end.column.saturating_sub(1) as u32,
-                        },
+                        end: Position { line: span.end.line.saturating_sub(1), character: span.end.column.saturating_sub(1) },
                     }
                 };
 
@@ -262,7 +259,7 @@ impl Backend {
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
 
-    fn get_completion_context(&self, nodes: &[TemplateNodeIR], pos: HxoPosition) -> Option<CompletionContext> {
+    fn get_completion_context(nodes: &[TemplateNodeIR], pos: HxoPosition) -> Option<CompletionContext> {
         for node in nodes {
             match node {
                 TemplateNodeIR::Element(el) => {
@@ -287,7 +284,7 @@ impl Backend {
                         }
 
                         // Check children
-                        if let Some(ctx) = self.get_completion_context(&el.children, pos) {
+                        if let Some(ctx) = Self::get_completion_context(&el.children, pos) {
                             return Some(ctx);
                         }
 
@@ -397,7 +394,7 @@ impl Backend {
         pos: HxoPosition,
         uri: &str,
     ) -> Option<GotoDefinitionResponse> {
-        let script_program = self.get_script_program(nodes);
+        let script_program = Self::get_script_program(nodes);
 
         for node in nodes {
             match node {
@@ -407,7 +404,7 @@ impl Backend {
                             return self.find_definition_in_script(el, pos, uri).await;
                         }
                         else if el.tag == "style" {
-                            return self.find_definition_in_style(el, pos, uri);
+                            return Self::find_definition_in_style(el, pos, uri);
                         }
                         else {
                             // 使用 Box::pin 处理异步递归
@@ -419,41 +416,39 @@ impl Backend {
                     }
                 }
                 TemplateNodeIR::Interpolation(expr) => {
-                    if !expr.span.is_unknown() {
-                        if is_pos_in_span(pos, expr.span) {
-                            if let Some(symbol) = self.find_symbol_in_template_expr(expr, pos) {
-                                // 1. 首先在 script 块中查找
-                                if let Some(program) = &script_program {
-                                    if let Some(def_span) = self.find_definition_of_symbol(program, &symbol) {
-                                        if self.is_import(program, &symbol) {
-                                            if let Some(loc) = self.find_external_definition(program, &symbol, uri).await {
-                                                return Some(GotoDefinitionResponse::Scalar(loc));
-                                            }
+                    if !expr.span.is_unknown() && is_pos_in_span(pos, expr.span) {
+                        if let Some(symbol) = Self::find_symbol_in_template_expr(expr, pos) {
+                            // 1. 首先在 script 块中查找
+                            if let Some(program) = &script_program {
+                                if let Some(def_span) = Self::find_definition_of_symbol(program, &symbol) {
+                                    if Self::is_import(program, &symbol) {
+                                        if let Some(loc) = self.find_external_definition(program, &symbol, uri).await {
+                                            return Some(GotoDefinitionResponse::Scalar(loc));
                                         }
+                                    }
 
-                                        if let Some(script_el_span) = self.get_script_element_span(nodes) {
-                                            return Some(GotoDefinitionResponse::Scalar(Location {
-                                                uri: Url::parse(uri).unwrap(),
-                                                range: Range {
-                                                    start: Position {
-                                                        line: (script_el_span.start.line + def_span.start.line - 1) as u32,
-                                                        character: (def_span.start.column - 1) as u32,
-                                                    },
-                                                    end: Position {
-                                                        line: (script_el_span.start.line + def_span.end.line - 1) as u32,
-                                                        character: (def_span.end.column - 1) as u32,
-                                                    },
+                                    if let Some(script_el_span) = Self::get_script_element_span(nodes) {
+                                        return Some(GotoDefinitionResponse::Scalar(Location {
+                                            uri: Url::parse(uri).unwrap(),
+                                            range: Range {
+                                                start: Position {
+                                                    line: script_el_span.start.line + def_span.start.line - 1,
+                                                    character: def_span.start.column - 1,
                                                 },
-                                            }));
-                                        }
+                                                end: Position {
+                                                    line: script_el_span.start.line + def_span.end.line - 1,
+                                                    character: def_span.end.column - 1,
+                                                },
+                                            },
+                                        }));
                                     }
                                 }
+                            }
 
-                                // 2. 检查是否为自动导入
-                                if self.auto_imports.contains(&symbol) {
-                                    if let Some(loc) = self.find_implicit_definition(&symbol, "@hxo/core", uri).await {
-                                        return Some(GotoDefinitionResponse::Scalar(loc));
-                                    }
+                            // 2. 检查是否为自动导入
+                            if self.auto_imports.contains(&symbol) {
+                                if let Some(loc) = self.find_implicit_definition(&symbol, "@hxo/core", uri).await {
+                                    return Some(GotoDefinitionResponse::Scalar(loc));
                                 }
                             }
                         }
@@ -475,7 +470,7 @@ impl Backend {
         Box::pin(self.find_definition_in_nodes(nodes, pos, uri))
     }
 
-    fn is_import(&self, program: &JsProgram, symbol: &str) -> bool {
+    fn is_import(program: &JsProgram, symbol: &str) -> bool {
         for stmt in &program.body {
             if let JsStmt::Import { specifiers, .. } = stmt {
                 if specifiers.contains(&symbol.to_string()) {
@@ -486,17 +481,17 @@ impl Backend {
         false
     }
 
-    fn get_script_program(&self, nodes: &[TemplateNodeIR]) -> Option<JsProgram> {
+    fn get_script_program(nodes: &[TemplateNodeIR]) -> Option<JsProgram> {
         for node in nodes {
             if let TemplateNodeIR::Element(el) = node {
                 if el.tag == "script" {
                     if let Some(TemplateNodeIR::Text(content, _)) = el.children.first() {
                         let mut state = ParseState::new(content);
-                        let ts_parser = JsTsParser;
+                        let ts_parser = ExprParser;
                         return ts_parser.parse(&mut state, "ts").ok();
                     }
                 }
-                if let Some(p) = self.get_script_program(&el.children) {
+                if let Some(p) = Self::get_script_program(&el.children) {
                     return Some(p);
                 }
             }
@@ -504,13 +499,13 @@ impl Backend {
         None
     }
 
-    fn get_script_element_span(&self, nodes: &[TemplateNodeIR]) -> Option<HxoSpan> {
+    fn get_script_element_span(nodes: &[TemplateNodeIR]) -> Option<HxoSpan> {
         for node in nodes {
             if let TemplateNodeIR::Element(el) = node {
                 if el.tag == "script" {
                     return Some(el.span);
                 }
-                if let Some(s) = self.get_script_element_span(&el.children) {
+                if let Some(s) = Self::get_script_element_span(&el.children) {
                     return Some(s);
                 }
             }
@@ -518,13 +513,11 @@ impl Backend {
         None
     }
 
-    fn find_symbol_in_template_expr(&self, expr: &ExpressionIR, pos: HxoPosition) -> Option<String> {
+    fn find_symbol_in_template_expr(expr: &ExpressionIR, pos: HxoPosition) -> Option<String> {
         // In hxo-ir, ExpressionIR has a 'code' field for the raw string
-        if !expr.span.is_unknown() {
-            if is_pos_in_span(pos, expr.span) {
-                // If it's a simple identifier expression
-                return Some(expr.code.clone());
-            }
+        if !expr.span.is_unknown() && is_pos_in_span(pos, expr.span) {
+            // If it's a simple identifier expression
+            return Some(expr.code.clone());
         }
         None
     }
@@ -532,7 +525,7 @@ impl Backend {
     async fn find_definition_in_script(&self, el: &ElementIR, pos: HxoPosition, uri: &str) -> Option<GotoDefinitionResponse> {
         if let Some(TemplateNodeIR::Text(content, _)) = el.children.first() {
             let mut state = ParseState::new(content);
-            let ts_parser = JsTsParser;
+            let ts_parser = ExprParser;
             if let Ok(program) = ts_parser.parse(&mut state, "ts") {
                 // Adjust position relative to the script tag start
                 let el_span = el.span;
@@ -542,26 +535,26 @@ impl Backend {
                     offset: 0,
                 };
 
-                if let Some(symbol) = self.find_symbol_at(&program, relative_pos) {
+                if let Some(symbol) = Self::find_symbol_at(&program, relative_pos) {
                     // 1. Check if it's an import (external definition)
-                    if self.is_import(&program, &symbol) {
+                    if Self::is_import(&program, &symbol) {
                         if let Some(loc) = self.find_external_definition(&program, &symbol, uri).await {
                             return Some(GotoDefinitionResponse::Scalar(loc));
                         }
                     }
 
                     // 2. Find where this symbol is defined locally
-                    if let Some(def_span) = self.find_definition_of_symbol(&program, &symbol) {
+                    if let Some(def_span) = Self::find_definition_of_symbol(&program, &symbol) {
                         return Some(GotoDefinitionResponse::Scalar(Location {
                             uri: Url::parse(uri).unwrap(),
                             range: Range {
                                 start: Position {
-                                    line: (el_span.start.line + def_span.start.line - 1) as u32,
-                                    character: (def_span.start.column - 1) as u32,
+                                    line: el_span.start.line + def_span.start.line - 1,
+                                    character: def_span.start.column - 1,
                                 },
                                 end: Position {
-                                    line: (el_span.start.line + def_span.end.line - 1) as u32,
-                                    character: (def_span.end.column - 1) as u32,
+                                    line: el_span.start.line + def_span.end.line - 1,
+                                    character: def_span.end.column - 1,
                                 },
                             },
                         }));
@@ -577,13 +570,10 @@ impl Backend {
                         return Some(GotoDefinitionResponse::Scalar(Location {
                             uri: Url::parse(uri).unwrap(),
                             range: Range {
-                                start: Position {
-                                    line: (el_span.start.line - 1) as u32,
-                                    character: (el_span.start.column - 1) as u32,
-                                },
+                                start: Position { line: el_span.start.line - 1, character: el_span.start.column - 1 },
                                 end: Position {
-                                    line: (el_span.start.line - 1) as u32,
-                                    character: (el_span.start.column + 6) as u32, // Just the "<script" part
+                                    line: el_span.start.line - 1,
+                                    character: el_span.start.column + 6, // Just the "<script" part
                                 },
                             },
                         }));
@@ -594,35 +584,35 @@ impl Backend {
         None
     }
 
-    fn find_symbol_at(&self, program: &JsProgram, pos: HxoPosition) -> Option<String> {
+    fn find_symbol_at(program: &JsProgram, pos: HxoPosition) -> Option<String> {
         for stmt in &program.body {
-            if let Some(symbol) = self.find_symbol_in_stmt(stmt, pos) {
+            if let Some(symbol) = Self::find_symbol_in_stmt(stmt, pos) {
                 return Some(symbol);
             }
         }
         None
     }
 
-    fn find_symbol_in_stmt(&self, stmt: &JsStmt, pos: HxoPosition) -> Option<String> {
+    fn find_symbol_in_stmt(stmt: &JsStmt, pos: HxoPosition) -> Option<String> {
         use JsStmt::*;
         match stmt {
-            Expr(expr, _) => self.find_symbol_in_expr(expr, pos),
+            Expr(expr, _) => Self::find_symbol_in_expr(expr, pos),
             VariableDecl { id, init, span, .. } => {
                 if is_pos_in_span(pos, *span) {
                     return Some(id.clone());
                 }
                 if let Some(init_expr) = init {
-                    return self.find_symbol_in_expr(init_expr, pos);
+                    return Self::find_symbol_in_expr(init_expr, pos);
                 }
                 None
             }
-            FunctionDecl { id, params: _, body, span, .. } => {
+            FunctionDecl { id, body, span, .. } => {
                 if is_pos_in_span(pos, *span) {
                     // Check if pos is on the function name
                     return Some(id.clone());
                 }
                 for s in body {
-                    if let Some(symbol) = self.find_symbol_in_stmt(s, pos) {
+                    if let Some(symbol) = Self::find_symbol_in_stmt(s, pos) {
                         return Some(symbol);
                     }
                 }
@@ -632,7 +622,7 @@ impl Backend {
         }
     }
 
-    fn find_symbol_in_expr(&self, expr: &JsExpr, pos: HxoPosition) -> Option<String> {
+    fn find_symbol_in_expr(expr: &JsExpr, pos: HxoPosition) -> Option<String> {
         use JsExpr::*;
         match expr {
             Identifier(name, span) => {
@@ -642,16 +632,16 @@ impl Backend {
             }
             Binary { left, right, span, .. } => {
                 if is_pos_in_span(pos, *span) {
-                    return self.find_symbol_in_expr(left, pos).or_else(|| self.find_symbol_in_expr(right, pos));
+                    return Self::find_symbol_in_expr(left, pos).or_else(|| Self::find_symbol_in_expr(right, pos));
                 }
             }
             Call { callee, args, span, .. } => {
                 if is_pos_in_span(pos, *span) {
-                    if let Some(symbol) = self.find_symbol_in_expr(callee, pos) {
+                    if let Some(symbol) = Self::find_symbol_in_expr(callee, pos) {
                         return Some(symbol);
                     }
                     for arg in args {
-                        if let Some(symbol) = self.find_symbol_in_expr(arg, pos) {
+                        if let Some(symbol) = Self::find_symbol_in_expr(arg, pos) {
                             return Some(symbol);
                         }
                     }
@@ -662,7 +652,7 @@ impl Backend {
         None
     }
 
-    fn find_definition_of_symbol(&self, program: &JsProgram, symbol: &str) -> Option<HxoSpan> {
+    fn find_definition_of_symbol(program: &JsProgram, symbol: &str) -> Option<HxoSpan> {
         for stmt in &program.body {
             use JsStmt::*;
             match stmt {
@@ -717,20 +707,20 @@ impl Backend {
             if uri.path().ends_with(".hxo") {
                 let mut state = ParseState::new(&content);
                 let parser = TemplateParser;
-                if let Ok(nodes) = parser.parse(&mut state) {
-                    if let Some(ext_program) = self.get_script_program(&nodes) {
-                        if let Some(def_span) = self.find_exported_definition(&ext_program, symbol) {
-                            if let Some(script_el_span) = self.get_script_element_span(&nodes) {
+                if let Ok(nodes) = parser.parse(&mut state, "html") {
+                    if let Some(ext_program) = Self::get_script_program(&nodes) {
+                        if let Some(def_span) = Self::find_exported_definition(&ext_program, symbol) {
+                            if let Some(script_el_span) = Self::get_script_element_span(&nodes) {
                                 return Some(Location {
                                     uri,
                                     range: Range {
                                         start: Position {
-                                            line: (script_el_span.start.line + def_span.start.line - 1) as u32,
-                                            character: (def_span.start.column - 1) as u32,
+                                            line: script_el_span.start.line + def_span.start.line - 1,
+                                            character: def_span.start.column - 1,
                                         },
                                         end: Position {
-                                            line: (script_el_span.start.line + def_span.end.line - 1) as u32,
-                                            character: (def_span.end.column - 1) as u32,
+                                            line: script_el_span.start.line + def_span.end.line - 1,
+                                            character: def_span.end.column - 1,
                                         },
                                     },
                                 });
@@ -741,20 +731,14 @@ impl Backend {
             }
             else {
                 let mut state = ParseState::new(&content);
-                let ts_parser = JsTsParser;
+                let ts_parser = ExprParser;
                 if let Ok(ext_program) = ts_parser.parse(&mut state, "ts") {
-                    if let Some(def_span) = self.find_exported_definition(&ext_program, symbol) {
+                    if let Some(def_span) = Self::find_exported_definition(&ext_program, symbol) {
                         return Some(Location {
                             uri: uri.clone(),
                             range: Range {
-                                start: Position {
-                                    line: (def_span.start.line - 1) as u32,
-                                    character: (def_span.start.column - 1) as u32,
-                                },
-                                end: Position {
-                                    line: (def_span.end.line - 1) as u32,
-                                    character: (def_span.end.column - 1) as u32,
-                                },
+                                start: Position { line: def_span.start.line - 1, character: def_span.start.column - 1 },
+                                end: Position { line: def_span.end.line - 1, character: def_span.end.column - 1 },
                             },
                         });
                     }
@@ -763,7 +747,7 @@ impl Backend {
                     for stmt in &ext_program.body {
                         match stmt {
                             JsStmt::ExportAll { source, .. } => {
-                                if let Some(target_uri) = self.resolve_path(&uri.to_string(), source) {
+                                if let Some(target_uri) = self.resolve_path(uri.as_str(), source) {
                                     if let Some(loc) = self.find_external_definition_in_file(target_uri, symbol).await {
                                         return Some(loc);
                                     }
@@ -771,7 +755,7 @@ impl Backend {
                             }
                             JsStmt::ExportNamed { source: Some(source), specifiers, .. } => {
                                 if specifiers.contains(&symbol.to_string()) {
-                                    if let Some(target_uri) = self.resolve_path(&uri.to_string(), source) {
+                                    if let Some(target_uri) = self.resolve_path(uri.as_str(), source) {
                                         if let Some(loc) = self.find_external_definition_in_file(target_uri, symbol).await {
                                             return Some(loc);
                                         }
@@ -787,7 +771,7 @@ impl Backend {
         })
     }
 
-    fn find_exported_definition(&self, program: &JsProgram, symbol: &str) -> Option<HxoSpan> {
+    fn find_exported_definition(program: &JsProgram, symbol: &str) -> Option<HxoSpan> {
         for stmt in &program.body {
             match stmt {
                 JsStmt::Export { declaration, .. } => match &**declaration {
@@ -804,7 +788,7 @@ impl Backend {
         None
     }
 
-    fn find_definition_in_style(&self, _el: &ElementIR, _pos: HxoPosition, _uri: &str) -> Option<GotoDefinitionResponse> {
+    fn find_definition_in_style(_el: &ElementIR, _pos: HxoPosition, _uri: &str) -> Option<GotoDefinitionResponse> {
         // Similar to script, use hxo-parser-css
         None
     }
@@ -814,6 +798,6 @@ pub async fn run_server() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(|client| Backend::new(client));
+    let (service, socket) = LspService::new(Backend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
 }

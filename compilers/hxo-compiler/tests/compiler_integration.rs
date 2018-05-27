@@ -74,3 +74,76 @@ function increment() {
     assert!(js.code.contains("createTextVNode(ctx.count)"));
     assert!(js.code.contains("h('button', { 'disabled': ctx.isMax }"));
 }
+
+#[test]
+fn test_compiler_tailwind() {
+    let mut compiler = Compiler::new();
+    let source = r#"
+<script>
+addStyle("p-6 m-4");
+</script>
+<template>
+  <div class="p-4 m-2 flex items-center bg-blue text-white rounded-lg shadow-sm">
+    <span :class="'font-bold text-2xl'">Tailwind Test</span>
+    <p :class="['text-center', 'mx-4']">Dynamic array</p>
+  </div>
+</template>
+"#;
+    let res = compiler.compile("TailwindComp", source).unwrap();
+    let css = res.css;
+
+    // Check CSS from static template classes
+    assert!(css.contains(".p-4"));
+    assert!(css.contains("padding: 1rem;"));
+    assert!(css.contains(".m-2"));
+    assert!(css.contains("margin: 0.5rem;"));
+    assert!(css.contains(".flex"));
+    assert!(css.contains("display: flex;"));
+    assert!(css.contains(".items-center"));
+    assert!(css.contains("align-items: center;"));
+    assert!(css.contains(".bg-blue"));
+    assert!(css.contains("background-color: #0000ff;"));
+    assert!(css.contains(".text-white"));
+    assert!(css.contains("color: #ffffff;"));
+    assert!(css.contains(".rounded-lg"));
+    assert!(css.contains("border-radius: 0.5rem;"));
+    assert!(css.contains(".shadow-sm"));
+
+    // Check CSS from :class dynamic template classes (static parts extracted)
+    assert!(css.contains(".font-bold"));
+    assert!(css.contains("font-weight: 700;"));
+    assert!(css.contains(".text-2xl"));
+    assert!(css.contains("font-size: 1.5rem;"));
+    assert!(css.contains(".text-center"));
+    assert!(css.contains("text-align: center;"));
+    assert!(css.contains(".mx-4"));
+    assert!(css.contains("margin-left: 1rem;"));
+    assert!(css.contains("margin-right: 1rem;"));
+
+    // Check CSS from script addStyle calls
+    assert!(css.contains(".p-6"));
+    assert!(css.contains("padding: 1.5rem;"));
+    assert!(css.contains(".m-4"));
+    assert!(css.contains("margin: 1rem;"));
+}
+
+#[test]
+fn test_compiler_pug() {
+    let mut compiler = Compiler::new();
+    let source = r#"
+<template lang="pug">
+div.container
+  h1 Hello Pug
+  p(id="desc", :class="activeClass") This is a pug template
+</template>
+"#;
+    let res = compiler.compile("PugComp", source).unwrap();
+    println!("Generated Pug JS:\n{}", res.code);
+
+    // Check if the output contains the correct h calls
+    assert!(res.code.contains("h('div', { 'class': 'container' }"));
+    assert!(res.code.contains("h('h1', null"));
+    assert!(res.code.contains("createTextVNode('Hello Pug')"));
+    assert!(res.code.contains("h('p', { 'id': 'desc', 'class': ctx.activeClass }"));
+    assert!(res.code.contains("createTextVNode('This is a pug template')"));
+}

@@ -1,9 +1,9 @@
-use hxo_parser::{ParseState, StyleSubParser};
+use hxo_parser::{ParseState, StyleParser};
 use hxo_types::Result;
 
 pub struct CssParser;
 
-impl StyleSubParser for CssParser {
+impl StyleParser for CssParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<String> {
         let mut parser = CssParserImpl { state, minify: false };
         parser.parse()

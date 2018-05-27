@@ -1,10 +1,10 @@
-use hxo_parser::{MetadataSubParser, ParseState};
+use hxo_parser::{MetadataParser, ParseState};
 use hxo_types::{HxoValue, Result};
 use std::collections::HashMap;
 
 pub struct PropertiesParser;
 
-impl MetadataSubParser for PropertiesParser {
+impl MetadataParser for PropertiesParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<HxoValue> {
         let mut parser = PropertiesParserImpl { state };
         parser.parse_properties()
@@ -18,7 +18,7 @@ struct PropertiesParserImpl<'a, 'b> {
 impl<'a, 'b> PropertiesParserImpl<'a, 'b> {
     pub fn parse_properties(&mut self) -> Result<HxoValue> {
         let mut map = HashMap::new();
-        
+
         while !self.state.cursor.is_eof() {
             self.state.cursor.skip_whitespace();
             if self.state.cursor.is_eof() {
@@ -44,17 +44,17 @@ impl<'a, 'b> PropertiesParserImpl<'a, 'b> {
             if separator == '=' || separator == ':' {
                 self.state.cursor.consume();
             }
-            
+
             self.state.cursor.skip_whitespace();
-            
+
             // Parse value (until end of line)
             let value = self.state.cursor.consume_while(|c| c != '\n').trim().to_string();
-            
-            // Handle simple nesting with dots if needed? 
+
+            // Handle simple nesting with dots if needed?
             // For now just flat map as per properties spec
             map.insert(key, HxoValue::String(value));
         }
-        
+
         Ok(HxoValue::Object(map))
     }
 }

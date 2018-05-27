@@ -3,7 +3,7 @@ use hxo_source_map::{SourceMap, SourceMapBuilder};
 use hxo_types::{CodeWriter, Position, Result, Span};
 use std::collections::HashSet;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct JsWriter {
     inner: CodeWriter,
 }
@@ -121,7 +121,7 @@ impl JsBackend {
 
         // 1. Generate Component Body First to track used features
         let mut body_writer = JsWriter::new();
-        self.generate_component_body(ir, &mut body_writer, &mut used_core, &mut used_dom)?;
+        Self::generate_component_body(ir, &mut body_writer, &mut used_core, &mut used_dom)?;
 
         // 2. Generate Imports based on used features
         if !used_core.is_empty() {
@@ -149,7 +149,6 @@ impl JsBackend {
     }
 
     fn generate_component_body(
-        &self,
         ir: &IRModule,
         writer: &mut JsWriter,
         used_core: &mut HashSet<String>,
@@ -166,7 +165,7 @@ impl JsBackend {
                     writer.write("null");
                 }
                 else if template.nodes.len() == 1 {
-                    self.generate_node_with_hoisting(&template.nodes[0], writer, ir, used_core, used_dom, &mut hoisted_nodes);
+                    Self::generate_node_with_hoisting(&template.nodes[0], writer, ir, used_core, used_dom, &mut hoisted_nodes);
                 }
                 else {
                     used_dom.insert("h".to_string());
@@ -174,7 +173,7 @@ impl JsBackend {
                     writer.write_line("h(Fragment, null, [");
                     writer.indent();
                     for node in &template.nodes {
-                        self.generate_node_with_hoisting(node, writer, ir, used_core, used_dom, &mut hoisted_nodes);
+                        Self::generate_node_with_hoisting(node, writer, ir, used_core, used_dom, &mut hoisted_nodes);
                         writer.write_line(",");
                     }
                     writer.dedent();
@@ -222,12 +221,13 @@ impl JsBackend {
                         })
                         .collect(),
                 );
-                self.generate_expr(
+                Self::generate_expr(
                     &hxo_ir::JsExpr::Literal(i18n_val, hxo_types::Span::unknown()),
                     &mut i18n_writer,
                     ir,
                     used_core,
                     used_dom,
+                    false,
                 );
                 writer.append(i18n_writer);
                 writer.write_line(",");
@@ -242,7 +242,7 @@ impl JsBackend {
                 }
                 if let Some(script) = &ir.script {
                     for stmt in &script.body {
-                        self.generate_stmt(stmt, writer, ir, used_core, used_dom);
+                        Self::generate_stmt(stmt, writer, ir, used_core, used_dom, false);
                     }
 
                     // Collect all identifiers to return them
@@ -300,7 +300,6 @@ impl JsBackend {
     }
 
     fn generate_node_with_hoisting(
-        &self,
         node: &TemplateNodeIR,
         writer: &mut JsWriter,
         ir: &IRModule,
@@ -308,19 +307,19 @@ impl JsBackend {
         used_dom: &mut HashSet<String>,
         hoisted_nodes: &mut Vec<(String, JsWriter)>,
     ) {
-        if self.is_static_node(node) {
+        if Self::is_static_node(node) {
             let mut node_writer = JsWriter::new();
-            self.generate_node(node, &mut node_writer, ir, used_core, used_dom, hoisted_nodes);
+            Self::generate_node(node, &mut node_writer, ir, used_core, used_dom, hoisted_nodes);
             let name = format!("_hoisted_{}", hoisted_nodes.len() + 1);
             hoisted_nodes.push((name.clone(), node_writer));
             writer.write(&name);
         }
         else {
-            self.generate_node(node, writer, ir, used_core, used_dom, hoisted_nodes);
+            Self::generate_node(node, writer, ir, used_core, used_dom, hoisted_nodes);
         }
     }
 
-    fn is_static_node(&self, node: &TemplateNodeIR) -> bool {
+    fn is_static_node(node: &TemplateNodeIR) -> bool {
         match node {
             TemplateNodeIR::Element(el) => el.is_static,
             TemplateNodeIR::Text(_, _) => true,
@@ -330,30 +329,30 @@ impl JsBackend {
     }
 
     fn generate_stmt(
-        &self,
         stmt: &JsStmt,
         writer: &mut JsWriter,
         ir: &IRModule,
         used_core: &mut HashSet<String>,
         used_dom: &mut HashSet<String>,
+        is_render: bool,
     ) {
         match stmt {
             JsStmt::Expr(expr, _) => {
-                self.generate_expr(expr, writer, ir, used_core, used_dom);
+                Self::generate_expr(expr, writer, ir, used_core, used_dom, is_render);
                 writer.write_line(";");
             }
             JsStmt::VariableDecl { kind, id, init, .. } => {
                 writer.write(&format!("{} {} ", kind, id));
                 if let Some(init) = init {
                     writer.write("= ");
-                    self.generate_expr(init, writer, ir, used_core, used_dom);
+                    Self::generate_expr(init, writer, ir, used_core, used_dom, is_render);
                 }
                 writer.write_line(";");
             }
             JsStmt::FunctionDecl { id, params, body, .. } => {
                 writer.write_block(&format!("function {}({})", id, params.join(", ")), |writer| {
                     for stmt in body {
-                        self.generate_stmt(stmt, writer, ir, used_core, used_dom);
+                        Self::generate_stmt(stmt, writer, ir, used_core, used_dom, is_render);
                     }
                 });
             }
@@ -363,7 +362,7 @@ impl JsBackend {
             }
             JsStmt::Export { declaration, .. } => {
                 writer.write("export ");
-                self.generate_stmt(declaration, writer, ir, used_core, used_dom);
+                Self::generate_stmt(declaration, writer, ir, used_core, used_dom, is_render);
             }
             JsStmt::ExportAll { source, .. } => {
                 writer.write_line(&format!("export * from '{}';", source));
@@ -382,15 +381,48 @@ impl JsBackend {
     }
 
     fn generate_expr(
-        &self,
         expr: &JsExpr,
         writer: &mut JsWriter,
         ir: &IRModule,
         used_core: &mut HashSet<String>,
         used_dom: &mut HashSet<String>,
+        is_render: bool,
     ) {
         match expr {
-            JsExpr::Identifier(id, span) => writer.write_with_span(id, *span),
+            JsExpr::Identifier(id, span) => {
+                if is_render {
+                    // Check if it's a signal or computed property
+                    let is_signal = if let Some(meta) = &ir.script_meta {
+                        meta.get("signals")
+                            .and_then(|s| s.as_array())
+                            .map(|a| a.iter().any(|v| v.as_str() == Some(id)))
+                            .unwrap_or(false)
+                    }
+                    else {
+                        false
+                    };
+
+                    let is_computed = if let Some(meta) = &ir.script_meta {
+                        meta.get("computed")
+                            .and_then(|s| s.as_array())
+                            .map(|a| a.iter().any(|v| v.as_str() == Some(id)))
+                            .unwrap_or(false)
+                    }
+                    else {
+                        false
+                    };
+
+                    if is_signal || is_computed {
+                        writer.write_with_span(&format!("ctx.{}()", id), *span);
+                    }
+                    else {
+                        writer.write_with_span(&format!("ctx.{}", id), *span);
+                    }
+                }
+                else {
+                    writer.write_with_span(id, *span);
+                }
+            }
             JsExpr::Literal(val, span) => match val {
                 hxo_types::HxoValue::String(s) => writer.write_with_span(&format!("'{}'", s), *span),
                 hxo_types::HxoValue::Number(n) => writer.write_with_span(&n.to_string(), *span),
@@ -416,7 +448,7 @@ impl JsBackend {
                         }
                         // Recursive literal handling for simple arrays
                         let expr = JsExpr::Literal(v.clone(), Span::unknown());
-                        self.generate_expr(&expr, writer, ir, used_core, used_dom);
+                        Self::generate_expr(&expr, writer, ir, used_core, used_dom, is_render);
                     }
                     writer.write("]");
                 }
@@ -428,15 +460,19 @@ impl JsBackend {
                         }
                         writer.write(&format!("{}: ", k));
                         let expr = JsExpr::Literal(v.clone(), Span::unknown());
-                        self.generate_expr(&expr, writer, ir, used_core, used_dom);
+                        Self::generate_expr(&expr, writer, ir, used_core, used_dom, is_render);
                     }
                     writer.write(" }");
                 }
             },
+            JsExpr::Unary { op, argument, span } => {
+                writer.write_with_span(op, *span);
+                Self::generate_expr(argument, writer, ir, used_core, used_dom, is_render);
+            }
             JsExpr::Binary { left, op, right, span } => {
-                self.generate_expr(left, writer, ir, used_core, used_dom);
+                Self::generate_expr(left, writer, ir, used_core, used_dom, is_render);
                 writer.write_with_span(&format!(" {} ", op), *span);
-                self.generate_expr(right, writer, ir, used_core, used_dom);
+                Self::generate_expr(right, writer, ir, used_core, used_dom, is_render);
             }
             JsExpr::Call { callee, args, span } => {
                 if let JsExpr::Identifier(id, _) = &**callee {
@@ -459,18 +495,18 @@ impl JsBackend {
                         writer.write("/*#__PURE__*/ ");
                     }
                 }
-                self.generate_expr(callee, writer, ir, used_core, used_dom);
+                Self::generate_expr(callee, writer, ir, used_core, used_dom, is_render);
                 writer.write_with_span("(", *span);
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         writer.write(", ");
                     }
-                    self.generate_expr(arg, writer, ir, used_core, used_dom);
+                    Self::generate_expr(arg, writer, ir, used_core, used_dom, is_render);
                 }
                 writer.write(")");
             }
             JsExpr::Member { object, property, computed, span } => {
-                self.generate_expr(object, writer, ir, used_core, used_dom);
+                Self::generate_expr(object, writer, ir, used_core, used_dom, is_render);
                 if *computed {
                     writer.write_with_span(&format!("[{}]", property), *span);
                 }
@@ -484,7 +520,7 @@ impl JsBackend {
                     if i > 0 {
                         writer.write(", ");
                     }
-                    self.generate_expr(el, writer, ir, used_core, used_dom);
+                    Self::generate_expr(el, writer, ir, used_core, used_dom, is_render);
                 }
                 writer.write("]");
             }
@@ -495,13 +531,32 @@ impl JsBackend {
                         writer.write(", ");
                     }
                     writer.write(&format!("{}: ", key));
-                    self.generate_expr(val, writer, ir, used_core, used_dom);
+                    Self::generate_expr(val, writer, ir, used_core, used_dom, is_render);
                 }
                 writer.write(" }");
             }
             JsExpr::ArrowFunction { params, body, span } => {
                 writer.write_with_span(&format!("({}) => ", params.join(", ")), *span);
-                self.generate_expr(body, writer, ir, used_core, used_dom);
+                Self::generate_expr(body, writer, ir, used_core, used_dom, is_render);
+            }
+            JsExpr::Conditional { test, consequent, alternate, .. } => {
+                Self::generate_expr(test, writer, ir, used_core, used_dom, is_render);
+                writer.write(" ? ");
+                Self::generate_expr(consequent, writer, ir, used_core, used_dom, is_render);
+                writer.write(" : ");
+                Self::generate_expr(alternate, writer, ir, used_core, used_dom, is_render);
+            }
+            JsExpr::TemplateLiteral { quasis, expressions, .. } => {
+                writer.write("`");
+                for (i, quasi) in quasis.iter().enumerate() {
+                    writer.write(quasi);
+                    if i < expressions.len() {
+                        writer.write("${");
+                        Self::generate_expr(&expressions[i], writer, ir, used_core, used_dom, is_render);
+                        writer.write("}");
+                    }
+                }
+                writer.write("`");
             }
             JsExpr::TseElement { tag, attributes, children, span } => {
                 used_dom.insert("h".to_string());
@@ -512,7 +567,7 @@ impl JsBackend {
                     }
                     writer.write_with_span(&format!("'{}': ", attr.name), attr.span);
                     if let Some(val) = &attr.value {
-                        self.generate_expr(val, writer, ir, used_core, used_dom);
+                        Self::generate_expr(val, writer, ir, used_core, used_dom, is_render);
                     }
                     else {
                         writer.write("true");
@@ -523,7 +578,7 @@ impl JsBackend {
                     if i > 0 {
                         writer.write(", ");
                     }
-                    self.generate_expr(child, writer, ir, used_core, used_dom);
+                    Self::generate_expr(child, writer, ir, used_core, used_dom, is_render);
                 }
                 writer.write("])");
             }
@@ -532,7 +587,6 @@ impl JsBackend {
     }
 
     fn generate_node(
-        &self,
         node: &TemplateNodeIR,
         writer: &mut JsWriter,
         ir: &IRModule,
@@ -543,61 +597,68 @@ impl JsBackend {
         match node {
             TemplateNodeIR::Element(el) => {
                 used_dom.insert("h".to_string());
-                writer.write_with_span(&format!("h('{}', {{ ", el.tag), el.span);
-                for (i, attr) in el.attributes.iter().enumerate() {
-                    if i > 0 {
-                        writer.write(", ");
-                    }
-                    if attr.name.starts_with('@') || attr.name.starts_with(':') {
-                        let value = attr.value.as_deref().unwrap_or("");
-                        let name = if attr.name.starts_with('@') {
-                            let event = &attr.name[1..];
-                            let mut c = event.chars();
-                            match c.next() {
-                                None => "on".to_string(),
-                                Some(f) => format!("on{}{}", f.to_uppercase(), c.as_str()),
+                writer.write_with_span(&format!("h('{}', ", el.tag), el.span);
+
+                if el.attributes.is_empty() {
+                    writer.write("null");
+                }
+                else {
+                    writer.write("{ ");
+                    for (i, attr) in el.attributes.iter().enumerate() {
+                        if i > 0 {
+                            writer.write(", ");
+                        }
+                        if attr.name.starts_with('@') || attr.name.starts_with(':') {
+                            let value = attr.value.as_deref().unwrap_or("");
+                            let name = if attr.name.starts_with('@') {
+                                let event = &attr.name[1..];
+                                let mut c = event.chars();
+                                match c.next() {
+                                    None => "on".to_string(),
+                                    Some(f) => format!("on{}{}", f.to_uppercase(), c.as_str()),
+                                }
+                            }
+                            else {
+                                attr.name[1..].to_string()
+                            };
+
+                            // Check if it's a signal or function
+                            let is_signal = if let Some(meta) = &ir.script_meta {
+                                meta.get("signals")
+                                    .and_then(|s| s.as_array())
+                                    .map(|a| a.iter().any(|v| v.as_str() == Some(value)))
+                                    .unwrap_or(false)
+                            }
+                            else {
+                                false
+                            };
+
+                            let is_computed = if let Some(meta) = &ir.script_meta {
+                                meta.get("computed")
+                                    .and_then(|s| s.as_array())
+                                    .map(|a| a.iter().any(|v| v.as_str() == Some(value)))
+                                    .unwrap_or(false)
+                            }
+                            else {
+                                false
+                            };
+
+                            if is_signal || is_computed {
+                                writer.write_with_span(&format!("'{}': ctx.{}()", name, value), attr.span);
+                            }
+                            else {
+                                writer.write_with_span(&format!("'{}': ctx.{}", name, value), attr.span);
                             }
                         }
                         else {
-                            attr.name[1..].to_string()
-                        };
-
-                        // Check if it's a signal or function
-                        let is_signal = if let Some(meta) = &ir.script_meta {
-                            meta.get("signals")
-                                .and_then(|s| s.as_array())
-                                .map(|a| a.iter().any(|v| v.as_str() == Some(value)))
-                                .unwrap_or(false)
-                        }
-                        else {
-                            false
-                        };
-
-                        let is_computed = if let Some(meta) = &ir.script_meta {
-                            meta.get("computed")
-                                .and_then(|s| s.as_array())
-                                .map(|a| a.iter().any(|v| v.as_str() == Some(value)))
-                                .unwrap_or(false)
-                        }
-                        else {
-                            false
-                        };
-
-                        if is_signal || is_computed {
-                            writer.write_with_span(&format!("'{}': ctx.{}()", name, value), attr.span);
-                        }
-                        else {
-                            writer.write_with_span(&format!("'{}': ctx.{}", name, value), attr.span);
+                            match &attr.value {
+                                Some(v) => writer.write_with_span(&format!("'{}': '{}'", attr.name, v), attr.span),
+                                None => writer.write_with_span(&format!("'{}': true", attr.name), attr.span),
+                            }
                         }
                     }
-                    else {
-                        match &attr.value {
-                            Some(v) => writer.write_with_span(&format!("'{}': '{}'", attr.name, v), attr.span),
-                            None => writer.write_with_span(&format!("'{}': true", attr.name), attr.span),
-                        }
-                    }
+                    writer.write(" }");
                 }
-                writer.write(" }");
 
                 if el.children.is_empty() {
                     writer.write(")");
@@ -606,7 +667,7 @@ impl JsBackend {
                     writer.write_line(", [");
                     writer.indent();
                     for child in &el.children {
-                        self.generate_node_with_hoisting(child, writer, ir, used_core, used_dom, hoisted_nodes);
+                        Self::generate_node_with_hoisting(child, writer, ir, used_core, used_dom, hoisted_nodes);
                         writer.write_line(",");
                     }
                     writer.dedent();
@@ -622,7 +683,7 @@ impl JsBackend {
 
                 writer.write_with_span("createTextVNode(", exp.span);
                 if let Some(ast) = &exp.ast {
-                    self.generate_expr(ast, writer, ir, used_core, used_dom);
+                    Self::generate_expr(ast, writer, ir, used_core, used_dom, true);
                 }
                 else {
                     // Fallback to code string
@@ -657,7 +718,7 @@ impl JsBackend {
                 writer.write(")");
             }
             TemplateNodeIR::Comment(c, span) => {
-                writer.write_with_span(&format!("// {}", c), *span);
+                writer.write_with_span(&format!("/* {} */", c), *span);
             }
         }
     }

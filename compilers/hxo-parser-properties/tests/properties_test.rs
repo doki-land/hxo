@@ -1,5 +1,5 @@
+use hxo_parser::{MetadataParser, ParseState};
 use hxo_parser_properties::PropertiesParser;
-use hxo_parser::{MetadataSubParser, ParseState};
 use hxo_types::HxoValue;
 
 #[test]
@@ -12,12 +12,13 @@ fn test_parse_properties_basic() {
     let parser = PropertiesParser;
     let mut state = ParseState::new(source);
     let result = parser.parse(&mut state, "properties").unwrap();
-    
+
     if let HxoValue::Object(map) = result {
         assert_eq!(map.get("hello").unwrap().as_str().unwrap(), "Hello, world!");
         assert_eq!(map.get("welcome").unwrap().as_str().unwrap(), "Welcome to HXO");
         assert_eq!(map.get("app.name").unwrap().as_str().unwrap(), "My App");
-    } else {
+    }
+    else {
         panic!("Expected object");
     }
 }
@@ -32,11 +33,12 @@ fn test_parse_properties_comments() {
     let parser = PropertiesParser;
     let mut state = ParseState::new(source);
     let result = parser.parse(&mut state, "properties").unwrap();
-    
+
     if let HxoValue::Object(map) = result {
         assert_eq!(map.len(), 1);
         assert_eq!(map.get("key").unwrap().as_str().unwrap(), "value");
-    } else {
+    }
+    else {
         panic!("Expected object");
     }
 }

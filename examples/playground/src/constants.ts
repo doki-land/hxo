@@ -1,4 +1,3 @@
-
 export const DEFAULT_APP_HXO = `<template>
   <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-100 max-w-md mx-auto">
     <h1 class="text-2xl font-bold text-gray-800 mb-4">{{ title }}</h1>
@@ -46,12 +45,12 @@ h1 { letter-spacing: -0.025em; }
 </style>`;
 
 export const EXAMPLES = [
-  {
-    name: 'Counter',
-    files: [
-      {
-        name: 'App.hxo',
-        content: `<template>
+    {
+        name: "Counter",
+        files: [
+            {
+                name: "App.hxo",
+                content: `<template>
   <div class="flex items-center gap-4 p-4 border rounded-lg w-fit">
     <button @click="count--" class="w-10 h-10 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full">-</button>
     <span class="text-xl font-bold min-w-[2rem] text-center">{{ count }}</span>
@@ -62,16 +61,16 @@ export const EXAMPLES = [
 <script>
 let count = ref(0); // 像普通变量一样声明，底层是 signal
 </script>`,
-        language: 'hxo'
-      }
-    ]
-  },
-  {
-    name: 'Todo List',
-    files: [
-      {
-        name: 'App.hxo',
-        content: `<template>
+                language: "hxo",
+            },
+        ],
+    },
+    {
+        name: "Todo List",
+        files: [
+            {
+                name: "App.hxo",
+                content: `<template>
   <div class="max-w-md mx-auto p-6 bg-white rounded-xl shadow-lg border">
     <h2 class="text-xl font-bold mb-4">Todo List</h2>
     
@@ -118,18 +117,18 @@ function addTodo(e) {
   e.target.value = "";
 }
 </script>`,
-        language: 'hxo'
-      }
-    ]
-  },
-  {
-    name: 'Tailwind Demo',
-    files: [
-      {
-        name: 'App.hxo',
-        content: DEFAULT_APP_HXO,
-        language: 'hxo'
-      }
-    ]
-  }
+                language: "hxo",
+            },
+        ],
+    },
+    {
+        name: "Tailwind Demo",
+        files: [
+            {
+                name: "App.hxo",
+                content: DEFAULT_APP_HXO,
+                language: "hxo",
+            },
+        ],
+    },
 ];

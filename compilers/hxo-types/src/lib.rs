@@ -129,19 +129,19 @@ pub fn is_pos_in_span(pos: Position, span: Span) -> bool {
     if span.is_unknown() {
         return false;
     }
-    
+
     if pos.line < span.start.line || pos.line > span.end.line {
         return false;
     }
-    
+
     if pos.line == span.start.line && pos.column < span.start.column {
         return false;
     }
-    
+
     if pos.line == span.end.line && pos.column > span.end.column {
         return false;
     }
-    
+
     true
 }
 
@@ -227,23 +227,11 @@ impl<'a> Cursor<'a> {
     }
 
     pub fn with_position(source: &'a str, pos: Position) -> Self {
-        Self {
-            source,
-            pos: pos.offset as usize,
-            line: pos.line as usize,
-            column: pos.column as usize,
-            base_offset: 0,
-        }
+        Self { source, pos: pos.offset as usize, line: pos.line as usize, column: pos.column as usize, base_offset: 0 }
     }
 
     pub fn with_sliced_source(source: &'a str, pos: Position) -> Self {
-        Self {
-            source,
-            pos: 0,
-            line: pos.line as usize,
-            column: pos.column as usize,
-            base_offset: pos.offset as usize,
-        }
+        Self { source, pos: 0, line: pos.line as usize, column: pos.column as usize, base_offset: pos.offset as usize }
     }
 
     pub fn is_eof(&self) -> bool {
@@ -311,6 +299,12 @@ impl<'a> Cursor<'a> {
         }
     }
 
+    pub fn skip_spaces(&mut self) {
+        while !self.is_eof() && (self.peek() == ' ' || self.peek() == '\t') {
+            self.consume();
+        }
+    }
+
     pub fn expect(&mut self, expected: char) -> Result<()> {
         if self.peek() == expected {
             self.consume();
@@ -332,11 +326,7 @@ impl<'a> Cursor<'a> {
     }
 
     pub fn position(&self) -> Position {
-        Position {
-            line: self.line as u32,
-            column: self.column as u32,
-            offset: (self.base_offset + self.pos) as u32,
-        }
+        Position { line: self.line as u32, column: self.column as u32, offset: (self.base_offset + self.pos) as u32 }
     }
 
     pub fn current_str(&self, start: usize) -> &str {

@@ -22,12 +22,12 @@ impl SourceMap {
     }
 
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string(self).map_err(|e| {
-            hxo_types::Error::external_error("serde_json".to_string(), e.to_string(), hxo_types::Span::default())
-        })
+        serde_json::to_string(self)
+            .map_err(|e| hxo_types::Error::external_error("serde_json".to_string(), e.to_string(), hxo_types::Span::default()))
     }
 }
 
+#[derive(Default)]
 pub struct SourceMapBuilder {
     mappings: Vec<SourceMapping>,
     sources: Vec<String>,

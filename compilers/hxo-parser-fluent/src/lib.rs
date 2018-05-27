@@ -1,10 +1,10 @@
-use hxo_parser::{MetadataSubParser, ParseState};
+use hxo_parser::{MetadataParser, ParseState};
 use hxo_types::{HxoValue, Result};
 use std::collections::HashMap;
 
 pub struct FluentParser;
 
-impl MetadataSubParser for FluentParser {
+impl MetadataParser for FluentParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<HxoValue> {
         let mut parser = FluentParserImpl { state };
         parser.parse_fluent()
@@ -18,7 +18,7 @@ struct FluentParserImpl<'a, 'b> {
 impl<'a, 'b> FluentParserImpl<'a, 'b> {
     pub fn parse_fluent(&mut self) -> Result<HxoValue> {
         let mut messages = HashMap::new();
-        
+
         while !self.state.cursor.is_eof() {
             self.state.cursor.skip_whitespace();
             if self.state.cursor.is_eof() {
@@ -43,13 +43,13 @@ impl<'a, 'b> FluentParserImpl<'a, 'b> {
             if self.state.cursor.peek() == '=' {
                 self.state.cursor.expect('=')?;
                 self.state.cursor.skip_whitespace();
-                
+
                 // Parse pattern (simple string for now)
                 let value = self.state.cursor.consume_while(|c| c != '\n').trim().to_string();
-                
+
                 let mut message_map = HashMap::new();
                 message_map.insert("val".to_string(), HxoValue::String(value));
-                
+
                 // Parse attributes
                 self.state.cursor.skip_whitespace();
                 while self.state.cursor.peek() == '.' {
@@ -62,16 +62,17 @@ impl<'a, 'b> FluentParserImpl<'a, 'b> {
                     message_map.insert(attr_name, HxoValue::String(attr_value));
                     self.state.cursor.skip_whitespace();
                 }
-                
+
                 // If there's only 'val', we can simplify it to just the string
                 if message_map.len() == 1 {
                     messages.insert(id, HxoValue::String(message_map.remove("val").unwrap().as_str().unwrap().to_string()));
-                } else {
+                }
+                else {
                     messages.insert(id, HxoValue::Object(message_map));
                 }
             }
         }
-        
+
         Ok(HxoValue::Object(messages))
     }
 }

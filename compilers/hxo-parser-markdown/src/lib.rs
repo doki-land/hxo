@@ -1,20 +1,27 @@
-use hxo_parser::ParseState;
+use hxo_ir::TemplateNodeIR;
+use hxo_parser::{ParseState, TemplateParser};
 use hxo_types::Result;
 
-pub struct MarkdownParser<'a> {
-    state: ParseState<'a>,
+pub struct MarkdownParser;
+
+impl TemplateParser for MarkdownParser {
+    fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<Vec<TemplateNodeIR>> {
+        let mut impl_parser = MarkdownParserImpl::with_state(state);
+        let html = impl_parser.parse_to_html()?;
+        hxo_parser_template::parse(html.trim())
+    }
 }
 
-impl<'a> MarkdownParser<'a> {
-    pub fn new(source: &'a str) -> Self {
-        Self { state: ParseState::new(source) }
-    }
+struct MarkdownParserImpl<'a, 'b> {
+    state: &'a mut ParseState<'b>,
+}
 
-    pub fn with_state(state: ParseState<'a>) -> Self {
+impl<'a, 'b> MarkdownParserImpl<'a, 'b> {
+    pub fn with_state(state: &'a mut ParseState<'b>) -> Self {
         Self { state }
     }
 
-    pub fn parse(&mut self) -> Result<String> {
+    pub fn parse_to_html(&mut self) -> Result<String> {
         let mut html = String::new();
         while !self.state.cursor.is_eof() {
             if self.state.cursor.peek() == '#' {
@@ -164,5 +171,7 @@ impl<'a> MarkdownParser<'a> {
 }
 
 pub fn parse(source: &str) -> Result<String> {
-    MarkdownParser::new(source).parse()
+    let mut state = ParseState::new(source);
+    let mut parser = MarkdownParserImpl::with_state(&mut state);
+    parser.parse_to_html()
 }

@@ -19,7 +19,7 @@ fn test_bundler_basic() {
         span: Span::default(),
     }];
 
-    bundler.analyze_project(&modules);
+    bundler.analyze_all(&modules);
     let runtime = bundler.generate_custom_runtime();
     assert!(runtime.contains("HXO Custom Runtime"));
 }

@@ -443,16 +443,19 @@ dependencies = [
  "hxo-optimizer",
  "hxo-parser",
  "hxo-parser-css",
+ "hxo-parser-expression",
  "hxo-parser-fluent",
  "hxo-parser-json",
  "hxo-parser-less",
+ "hxo-parser-markdown",
  "hxo-parser-properties",
+ "hxo-parser-pug",
  "hxo-parser-sass",
  "hxo-parser-scss",
+ "hxo-parser-stylus",
  "hxo-parser-tailwind",
  "hxo-parser-template",
  "hxo-parser-toml",
- "hxo-parser-typescript",
  "hxo-parser-yaml",
  "hxo-source-map",
  "hxo-ssr",
@@ -460,7 +463,6 @@ dependencies = [
  "hxo-target-dts",
  "hxo-target-html",
  "hxo-target-js",
- "hxo-target-map",
  "hxo-target-wasm",
  "hxo-types",
  "serde",
@@ -491,9 +493,9 @@ dependencies = [
  "hxo-compiler",
  "hxo-ir",
  "hxo-parser",
+ "hxo-parser-expression",
  "hxo-parser-template",
  "hxo-parser-toml",
- "hxo-parser-typescript",
  "hxo-types",
  "serde",
  "tokio",
@@ -530,6 +532,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hxo-parser-expression"
+version = "0.1.0"
+dependencies = [
+ "hxo-ir",
+ "hxo-parser",
+ "hxo-types",
+]
+
+[[package]]
 name = "hxo-parser-fluent"
 version = "0.1.0"
 dependencies = [
@@ -563,7 +574,9 @@ dependencies = [
 name = "hxo-parser-markdown"
 version = "0.1.0"
 dependencies = [
+ "hxo-ir",
  "hxo-parser",
+ "hxo-parser-template",
  "hxo-types",
 ]
 
@@ -580,6 +593,9 @@ dependencies = [
 name = "hxo-parser-pug"
 version = "0.1.0"
 dependencies = [
+ "hxo-ir",
+ "hxo-parser",
+ "hxo-parser-expression",
  "hxo-types",
  "serde",
 ]
@@ -616,6 +632,7 @@ dependencies = [
 name = "hxo-parser-stylus"
 version = "0.1.0"
 dependencies = [
+ "hxo-parser",
  "hxo-types",
  "serde",
 ]
@@ -624,6 +641,8 @@ dependencies = [
 name = "hxo-parser-tailwind"
 version = "0.1.0"
 dependencies = [
+ "hxo-ir",
+ "hxo-parser",
  "hxo-types",
  "serde",
 ]
@@ -634,6 +653,7 @@ version = "0.1.0"
 dependencies = [
  "hxo-ir",
  "hxo-parser",
+ "hxo-parser-expression",
  "hxo-types",
 ]
 
@@ -646,15 +666,6 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
-]
-
-[[package]]
-name = "hxo-parser-typescript"
-version = "0.1.0"
-dependencies = [
- "hxo-ir",
- "hxo-parser",
- "hxo-types",
 ]
 
 [[package]]
@@ -726,15 +737,6 @@ dependencies = [
 
 [[package]]
 name = "hxo-target-js"
-version = "0.1.0"
-dependencies = [
- "hxo-ir",
- "hxo-source-map",
- "hxo-types",
-]
-
-[[package]]
-name = "hxo-target-map"
 version = "0.1.0"
 dependencies = [
  "hxo-ir",

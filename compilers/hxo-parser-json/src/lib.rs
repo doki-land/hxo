@@ -1,10 +1,10 @@
-use hxo_parser::{Cursor, MetadataSubParser, ParseState};
+use hxo_parser::{Cursor, MetadataParser, ParseState};
 use hxo_types::{Error, HxoValue, Position, Result, Route, RouterConfig, Span};
 use std::collections::HashMap;
 
 pub struct JsonParser;
 
-impl MetadataSubParser for JsonParser {
+impl MetadataParser for JsonParser {
     fn parse(&self, state: &mut ParseState, _lang: &str) -> Result<HxoValue> {
         let mut parser = JsonParserImpl { state };
         parser.parse_json()

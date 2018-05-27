@@ -5,7 +5,6 @@ pub use hxo_target_css::CssBackend;
 pub use hxo_target_dts::DtsBackend;
 pub use hxo_target_html::HtmlBackend;
 pub use hxo_target_js::JsBackend;
-pub use hxo_target_map::MapBackend;
 pub use hxo_target_wasm::WasmBackend;
 
 pub trait Backend {
@@ -44,13 +43,6 @@ impl Backend for CssBackend {
 
 impl Backend for DtsBackend {
     type Output = String;
-    fn generate(&self, ir: &IRModule) -> Result<Self::Output> {
-        self.generate(ir)
-    }
-}
-
-impl Backend for MapBackend {
-    type Output = hxo_source_map::SourceMap;
     fn generate(&self, ir: &IRModule) -> Result<Self::Output> {
         self.generate(ir)
     }

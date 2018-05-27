@@ -11,4 +11,5 @@ categories = ["parsing"]
 
 [dependencies]
 hxo-types.workspace = true
+hxo-parser.workspace = true
 serde.workspace = true

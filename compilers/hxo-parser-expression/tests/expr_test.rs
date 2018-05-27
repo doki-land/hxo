@@ -1,5 +1,5 @@
 use hxo_ir::JsExpr;
-use hxo_parser_typescript::parse_expression;
+use hxo_parser_expression::parse_expression;
 
 #[test]
 fn test_parse_complex_expr() {

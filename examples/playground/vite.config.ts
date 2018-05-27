@@ -1,13 +1,13 @@
+import { execSync } from "child_process";
 import path from "path";
 import { defineConfig, type Plugin } from "vite";
-import { execSync } from "child_process";
 
 function hxoPlugin(): Plugin {
     return {
         name: "vite-plugin-hxo",
         transform(code, id) {
             if (id.endsWith(".hxo") || id.includes(".hxo?")) {
-                const filePath = id.split('?')[0];
+                const filePath = id.split("?")[0];
                 const compilerPath = path.resolve(
                     __dirname,
                     "../../target/debug/hxo-compile.exe",

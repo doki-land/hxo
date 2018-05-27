@@ -6,6 +6,12 @@ use std::collections::HashMap;
 pub enum JsExpr {
     Identifier(String, #[serde(default)] Span),
     Literal(HxoValue, #[serde(default)] Span),
+    Unary {
+        op: String,
+        argument: Box<JsExpr>,
+        #[serde(default)]
+        span: Span,
+    },
     Binary {
         left: Box<JsExpr>,
         op: String,
@@ -41,7 +47,40 @@ pub enum JsExpr {
         #[serde(default)]
         span: Span,
     },
+    Conditional {
+        test: Box<JsExpr>,
+        consequent: Box<JsExpr>,
+        alternate: Box<JsExpr>,
+        #[serde(default)]
+        span: Span,
+    },
+    TemplateLiteral {
+        quasis: Vec<String>,
+        expressions: Vec<JsExpr>,
+        #[serde(default)]
+        span: Span,
+    },
     Other(String, #[serde(default)] Span),
+}
+
+impl JsExpr {
+    pub fn span(&self) -> Span {
+        match self {
+            JsExpr::Identifier(_, span) => *span,
+            JsExpr::Literal(_, span) => *span,
+            JsExpr::Unary { span, .. } => *span,
+            JsExpr::Binary { span, .. } => *span,
+            JsExpr::Call { span, .. } => *span,
+            JsExpr::Member { span, .. } => *span,
+            JsExpr::Array(_, span) => *span,
+            JsExpr::Object(_, span) => *span,
+            JsExpr::ArrowFunction { span, .. } => *span,
+            JsExpr::TseElement { span, .. } => *span,
+            JsExpr::Conditional { span, .. } => *span,
+            JsExpr::TemplateLiteral { span, .. } => *span,
+            JsExpr::Other(_, span) => *span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

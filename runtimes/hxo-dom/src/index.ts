@@ -1,5 +1,5 @@
 import type { VNode } from "@hxo/core";
-import { createEffect, Fragment, h, Text, createTextVNode } from "@hxo/core";
+import { createEffect, createTextVNode, Fragment, h, Text } from "@hxo/core";
 
 export { Text, Fragment, h, createTextVNode };
 export type { VNode };

@@ -7,7 +7,7 @@ mod registry;
 
 pub use base::ParseState;
 pub use hxo_types::Cursor;
-pub use registry::{MetadataSubParser, ParserRegistry, ScriptSubParser, StyleSubParser, TemplateSubParser};
+pub use registry::{MetadataParser, ParserRegistry, ScriptParser, StyleParser, TemplateParser};
 
 pub struct Parser<'a> {
     name: String,
@@ -33,8 +33,9 @@ impl<'a> Parser<'a> {
             state.cursor.skip_whitespace();
             if state.cursor.peek_str("<template") {
                 state.cursor.consume_str("<template");
-                let _attrs = state.parse_tag_attributes();
+                let attrs = state.parse_tag_attributes();
                 state.cursor.expect('>')?;
+                let lang = attrs.get("lang").cloned().unwrap_or_else(|| "html".to_string());
 
                 let start_pos = state.cursor.position();
                 let start_offset = state.cursor.pos;
@@ -44,9 +45,9 @@ impl<'a> Parser<'a> {
                 let content = &state.cursor.source[start_offset..state.cursor.pos];
                 state.cursor.consume_str("</template>");
 
-                if let Some(template_parser) = self.registry.get_template_parser() {
+                if let Some(template_parser) = self.registry.get_template_parser(&lang) {
                     let mut sub_state = ParseState::with_cursor(Cursor::with_sliced_source(content, start_pos));
-                    template_nodes.extend(template_parser.parse(&mut sub_state)?);
+                    template_nodes.extend(template_parser.parse(&mut sub_state, &lang)?);
                 }
             }
             else if state.cursor.peek_str("<script") {
@@ -107,10 +108,8 @@ impl<'a> Parser<'a> {
 
                 if let Some(metadata_parser) = self.registry.get_metadata_parser(&lang) {
                     let mut sub_state = ParseState::with_cursor(Cursor::with_sliced_source(content, start_pos));
-                    if let Ok(val) = metadata_parser.parse(&mut sub_state, &lang) {
-                        if let HxoValue::Object(map) = val {
-                            metadata.extend(map);
-                        }
+                    if let Ok(HxoValue::Object(map)) = metadata_parser.parse(&mut sub_state, &lang) {
+                        metadata.extend(map);
                     }
                 }
             }
@@ -143,7 +142,12 @@ impl<'a> Parser<'a> {
             metadata,
             script,
             script_meta: None,
-            template: if template_nodes.is_empty() { None } else { Some(TemplateIR { nodes: template_nodes, span: Span::default() }) },
+            template: if template_nodes.is_empty() {
+                None
+            }
+            else {
+                Some(TemplateIR { nodes: template_nodes, span: Span::default() })
+            },
             styles: ir_styles,
             i18n: None,
             wasm: Vec::new(),
